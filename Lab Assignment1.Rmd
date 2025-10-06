@@ -1,23 +1,28 @@
 ---
 title: "Lab Assignment 1"
-author: "zheshuo and geming"
+author: "Zheshuo and Geming"
 date: "2025-10-05"
 output: html_document
 ---
 
+# ASSIGNMENT 1: GEORGIA HOUSE PRICE
+
+## Before Starting
+
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE) # Clear the plots
+rm(list=ls()) # Clear the environment
 ```
 
+We start by loading essential libraries, importing the data, and defining functions to simplify repetitive operations.
 
-We start by importing the data, loading essential libraries, and defining functions to simplify repetitive operations.
+```{r}
+# Installing dependencies
+install.packages("lubridate")
+```
 
 ```{r include = FALSE}
-
-rm(list=ls())
-
-georgia <- read.csv("RealEstate_Georgia.csv")
-
+# Loading libraries
 library(moments)
 library(car)
 library(chemometrics)
@@ -31,7 +36,6 @@ library(ggplot2)
 library(AER)
 library(MASS)
 library(dplyr)
-install.packages("lubridate")
 library(lubridate)
 library(stringr)
 library(readr)
@@ -39,30 +43,105 @@ library(tidyr)
 library(tidyselect)
 ```
 
+```{r}
+# Importing the main data of the assignment
+georgia <- read.csv("RealEstate_Georgia.csv")
+```
 
-Data Cleaning
+```{r}
+# Get the dimension of the dataset
+dim(georgia) # 6168 obs + 39 variables
+```
+
+```{r}
+# Show the name of columns
+names(georgia)
+```
+
 ```{r}
 # Check the structure of the dataset
 str(georgia)
-#First, we should filter and remove all observations that were not posted in 2021 and some validation based on common sense like bathrooms and bedrooms should be higher than 0.
-df <- georgia %>%
+```
+
+```{r}
+# Use summary function to get a fast understanding of the dataset
+summary(georgia)
+```
+
+## Variable Analysis
+
+```{r}
+
+```
+
+## Data Cleaning
+
+```{r}
+# First, let's check if there is any missing values in the datase
+sum(is.na(georgia)) # There are no NAs in the dataset
+```
+
+
+```{r}
+# Next, we should filter and remove all observations that were not posted in 2021 and some validation based on common sense like bathrooms and bedrooms should be higher than 0.
+georgia_2021_only <- georgia %>%
   filter(year(datePostedString) == 2021, bathrooms > 0, bedrooms > 0, price > 0) %>%
-  distinct()
+  distinct() # Retain unique rows
 
-#fix structure errors
-df <- df %>%
-  # ✅ 2. Fix structural errors /
-  rename_with(~ str_trim(.x) %>% str_replace_all(" ", "_") %>% str_to_lower()) %>%  
-    # Column names: remove leading and trailing spaces, replace spaces with underscores, and convert all to lowercase.  
+# While there are obs where the number of bathrooms and bedrooms is 0, there are no obs where the price is lower o equal to 0: length(which(georgia$price > 0)) == 6168
+
+# After applying this filter, the new number of rows is 6097
+
+```
+
+```{r}
+# Interestingly, the column id does not have the same number of unique values as the number of obs.
+nrow(georgia_2021_only) == length(unique(georgia_2021_only$id)) # 6097 vs 5448
+
+# On the other hand, the columns X.1 and X have the exact number of unique values as rows
+length(unique(georgia_2021_only$X.1)) # 6097
+length(unique(georgia_2021_only$X)) # 6098
+
+# Since the columns X.1 and X do not provide any relevant information, we are just going to concatenate them to the tail of the column id, so it will have a unique value for every obs. Although the id itself is neither useful, we can still use it to identify the observations.
+georgia_2021_only$id_unique <- paste0(georgia_2021_only$id, "_", 
+                                      georgia_2021_only$X.1, "_", 
+                                      georgia_2021_only$X)
+
+# Move id_unique to the front and drop the old columns
+georgia_2021_only <-
+  georgia_2021_only[, c(ncol(georgia_2021_only), 1:ncol(georgia_2021_only)-1)]
+georgia_2021_only$X.1 <- NULL
+georgia_2021_only$X <- NULL
+georgia_2021_only$id <- NULL
+
+```
+
+```{r}
+# Let's check if there are columns that have only one value across the dataset
+sapply(georgia_2021_only,n_distinct)
+
+# Note that stateId, country, state, hasBadGeoCode and currency only have one factor throughout the dataset (16, USA, GA, 0, USD). These columns do not provide anything to the posterior analysis, so they should be eliminated. The following line removes all constant columns.
+georgia_no_one_value <- georgia_2021_only[,
+              sapply(georgia_2021_only, function(x) length(unique(x)) > 1)]
+
+```
+
+```{r}
+# event -> mapping
+```
+
+```{r}
+# which(georgia_2021_only$hasGarage == 1 & georgia_2021_only$garageSpaces == 0) -> is that even possible?
+```
+
+
+```{r}
+# Fix structure errors
+georgia_str <- georgia_2021_only %>%
   mutate(
-    city = city %>% str_trim() %>% str_to_title(),        # City: remove spaces and capitalize the first letter.
+    city = city %>% str_trim() %>% str_to_title(),
+    # City: remove spaces and capitalize the first letter.
 )
-
-
-df <- df [, sapply(georgia, function(x) length(unique(x[!is.na(x)])) > 1)]# remove all constant column 
-df_unique<-sapply(df,n_distinct) # check if we have some unique value and it doesn't contain any information.
-df_unique<-df_unique[df_unique==nrow(df)] # select unique value
-names(df_unique)
 
 ```
 
