@@ -1,0 +1,86 @@
+---
+title: "Lab Assignment 1"
+author: "zheshuo and geming"
+date: "2025-10-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+We start by importing the data, loading essential libraries, and defining functions to simplify repetitive operations.
+
+```{r include = FALSE}
+
+rm(list=ls())
+
+georgia <- read.csv("RealEstate_Georgia.csv")
+
+library(moments)
+library(car)
+library(chemometrics)
+library(mice)
+library(missMDA)
+library(FactoMineR)
+library(corrplot)
+library(VIM)
+library(dplyr)
+library(ggplot2)
+library(AER)
+library(MASS)
+library(dplyr)
+install.packages("lubridate")
+library(lubridate)
+library(stringr)
+library(readr)
+library(tidyr)
+library(tidyselect)
+```
+
+
+Data Cleaning
+```{r}
+# Check the structure of the dataset
+str(georgia)
+#First, we should filter and remove all observations that were not posted in 2021 and some validation based on common sense like bathrooms and bedrooms should be higher than 0.
+df <- georgia %>%
+  filter(year(datePostedString) == 2021, bathrooms > 0, bedrooms > 0, price > 0) %>%
+  distinct()
+
+#fix structure errors
+df <- df %>%
+  # ✅ 2. Fix structural errors /
+  rename_with(~ str_trim(.x) %>% str_replace_all(" ", "_") %>% str_to_lower()) %>%  
+    # Column names: remove leading and trailing spaces, replace spaces with underscores, and convert all to lowercase.  
+  mutate(
+    city = city %>% str_trim() %>% str_to_title(),        # City: remove spaces and capitalize the first letter.
+)
+
+
+df <- df [, sapply(georgia, function(x) length(unique(x[!is.na(x)])) > 1)]# remove all constant column 
+df_unique<-sapply(df,n_distinct) # check if we have some unique value and it doesn't contain any information.
+df_unique<-df_unique[df_unique==nrow(df)] # select unique value
+names(df_unique)
+
+```
+
+\newpage
+
+Explanatory Data Analysis
+
+In this section, we perform a crucial step in any data science project, especially when preparing data for modeling. A comprehensive descriptive analysis is carried out for each variable, emphasizing their most relevant characteristics. We proceed with a column-by-column examination of the dataset, followed by the generation of a data quality report. Subsequently, we prepare the data for the modeling phase by handling missing values through imputation techniques, removing non-informative variables, and creating new derived features where appropriate.
+
+It is important to note that the explanatory data analysis is conducted exclusively on the training dataset. However, the creation and removal of variables derived from this process also affect the test dataset to ensure consistency across both sets.
+
+
+Univariate Descriptive Analysis
+
+In this initial phase, we analyze each variable in the dataset, emphasizing their key characteristics. Numeric variables that represent categorical or qualitative concepts are converted into factors, and new features may be created based on existing numerical variables to enhance model performance.
+
+Finally, a comprehensive data quality report is presented, assessing the overall integrity of the dataset and discussing potential implications for the modeling process.
+
+
+
+
