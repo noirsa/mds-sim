@@ -121,29 +121,99 @@ georgia_2021_only$id <- NULL
 sapply(georgia_2021_only,n_distinct)
 
 # Note that stateId, country, state, hasBadGeoCode and currency only have one factor throughout the dataset (16, USA, GA, 0, USD). These columns do not provide anything to the posterior analysis, so they should be eliminated. The following line removes all constant columns.
-georgia_no_one_value <- georgia_2021_only[,
+georgia_value_rem <- georgia_2021_only[,
               sapply(georgia_2021_only, function(x) length(unique(x)) > 1)]
 
 ```
 
 ```{r}
-# event -> mapping
+# We found that the columns is_bankOwned and is_forAuction only have one positive case for each of them in the filtered dataset. We should also remove these columns, since 99% of the rows have 0 in these two columns.
+sum(georgia_value_rem$is_forAuction == 1)
+#georgia_value_rem[which(georgia_value_rem$is_bankOwned == 1),]
+sum(georgia_value_rem$is_bankOwned == 1)
+#georgia_value_rem[which(georgia_value_rem$is_forAuction == 1),]
+
+# Remove columns
+georgia_value_rem$is_bankOwned <- NULL
+georgia_value_rem$is_forAuction <- NULL
 ```
+
+```{r}
+# In the city column there are some factors registered in uppercase, we can also remove white spaces that might appear at the beginning and the end of each city.
+unique(factor(georgia_value_rem$city))[293] # JOHNS CREEK
+
+# The following line corrects that structure error
+georgia_value_rem <- georgia_value_rem %>%
+  mutate(
+    city = city %>% str_trim() %>% str_to_title(),
+    # Remove spaces and capitalize the first letter.
+)
+
+# Now the number of unique factors reduced from 380 to 370
+
+```
+
+```{r}
+# The column levels is messy and not consistent, since it has both numeric and categorical labels
+unique(factor(georgia_value_rem$levels))
+
+# We are going to perform an explicit mapping for the 35 observed raw values
+mapping <- c(
+  "One and One Half"                          = "1.5",
+  "One"                                       = "1",
+  "Two"                                       = "2",
+  "Three Or More"                             = "3+",
+  "Multi/Split"                               = "multi",
+  "Multi/Split-Split Level"                   = "multi",
+  "0"                                         = NA,
+  "One-Two Story Foyer"                       = "multi",
+  "Tri Level"                                 = "split",
+  "2.5 Story"                                 = "2.5",
+  "Manufactured Home 1 Story"                 = "manufactured",
+  "Two-Split Foyer"                           = "split",
+  "One and One Half-Split Level"              = "multi",
+  "Split Foyer"                               = "split",
+  "One and One Half-Two"                      = "multi",
+  "Two-Two Story Foyer"                       = "multi",
+  "One and One Half-Multi/Split"              = "multi",
+  "Three Or More-Two Story Foyer"             = "3+",
+  "One-Two"                                   = "multi",
+  "One-One and One Half"                      = "multi",
+  "One-Manufactured Home 1 Story"             = "manufactured",
+  "Multi/Split-Two"                           = "multi",
+  "Two-Multi/Split"                           = "multi",
+  "One-Other"                                 = "other",
+  "Two-Three Or More"                         = "multi",
+  "One-One and One Half-Two"                  = "multi",
+  "Three Or More-Split Level-Tri-Level"       = "3+",
+  "Two-Foyer - 2 Story"                       = "2",
+  "Other-See Remarks"                         = "other",
+  "Split Level"                               = "split",
+  "3 Story"                                   = "3+",
+  "Two-Split Level"                           = "split",
+  "One-Mobile Home 1 Story"                   = "manufactured",
+  "Tri Level-Split Level"                     = "split",
+  "Tri-Level"                                 = "split"
+)
+
+# Apply mapping
+georgia_value_rem <- georgia_value_rem %>%
+  mutate(
+    levels = mapping[as.character(levels)],
+  )%>%
+  filter(!is.na(levels)) # Rental houses with 0 stories are not possible, they need removing
+
+```
+
 
 ```{r}
 # which(georgia_2021_only$hasGarage == 1 & georgia_2021_only$garageSpaces == 0) -> is that even possible?
 ```
 
-
 ```{r}
-# Fix structure errors
-georgia_str <- georgia_2021_only %>%
-  mutate(
-    city = city %>% str_trim() %>% str_to_title(),
-    # City: remove spaces and capitalize the first letter.
-)
-
+# There are some columns that do not provide any useful information at all, like description, streetAddress, ... Can we eliminate them?
 ```
+
 
 \newpage
 
