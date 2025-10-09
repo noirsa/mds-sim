@@ -7,7 +7,7 @@ output: html_document
 
 # ASSIGNMENT 1: GEORGIA HOUSE PRICE
 
-## Before Starting
+## 0. Before Starting
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE) # Clear the plots
@@ -48,6 +48,8 @@ library(tidyselect)
 georgia <- read.csv("RealEstate_Georgia.csv")
 ```
 
+The dataset contains 6168 housing ads from different cities in different counties of the Georgia state, there are posts from 2014 to 2021 but majority of data are for 2021. For a fair analysis, the houses that are posted in 2021 are taken into account.
+
 ```{r}
 # Get the dimension of the dataset
 dim(georgia) # 6168 obs + 39 variables
@@ -68,24 +70,610 @@ str(georgia)
 summary(georgia)
 ```
 
-## Variable Analysis
-
 ```{r}
-
+# Converting the date column to numeric
+georgia$datePostedString <- as.Date(georgia$datePostedString, format = "%Y-%m-%d")
+georgia$datePostedString <- as.numeric(format(georgia$datePostedString, "%Y"))
 ```
 
+## 1. Explanatory Data Analysis
+
+In this section, we perform a crucial step in any data science project, especially when preparing data for modeling. A comprehensive descriptive analysis is carried out for each variable, emphasizing their most relevant characteristics. We proceed with a column-by-column examination of the dataset, followed by the generation of a data quality report. Subsequently, we prepare the data for the modeling phase by handling missing values through imputation techniques, removing non-informative variables, and creating new derived features where appropriate.
+
+**Variable 1: X.1**
+
+X.1 is a numerical variable without missing values. By using a histogram, it is clear that the data contains a unique id for each of the observations, since the number of unique values in the column is the same as the number of rows. Even though, it's obvious that the data is not normally distributed, we performed the shapiro test to confirm that. It contains no missing values thus imputation is not needed. This variable does not contain any outliers. Interestingly, the maximum value (6468) in the data does not match the number of columns (6168), maybe these ids belong to the observations of the original dataset where rental houses from other states are also stored.
+
+```{r}
+# Summary of the column
+summary(georgia$X.1)
+# Any missing values
+sum(is.na(georgia$X.1))
+# First five elements
+georgia$X.1[1:5]
+# Number of unique values
+length(unique(georgia$X.1))
+
+hist(georgia$X.1, breaks = 20, freq = F) 
+curve(dnorm(x, mean(georgia$X.1), sd(georgia$X.1)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+sx1 <- sample(georgia$X.1, 5000)
+shapiro.test(sx1)
+
+# Boxplot to detect outliers
+Boxplot(georgia$X.1)
+```
+
+**Variable 2: X**
+
+X is a numerical variable without missing values. It is very similar to the previous variable in all aspects. Although the range of its values is twice of the previous one ([1,6428] vs [25,13803]).
+
+```{r}
+# Summary of the column
+summary(georgia$X)
+# Any missing values
+sum(is.na(georgia$X))
+# First five elements
+georgia$X[1:5]
+# Number of unique values
+length(unique(georgia$X))
+
+hist(georgia$X, breaks = 20, freq = F) 
+curve(dnorm(x, mean(georgia$X), sd(georgia$X)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+sx <- sample(georgia$X, 5000)
+shapiro.test(sx)
+
+# Boxplot to detect outliers
+Boxplot(georgia$X)
+```
+
+**Variable 3: id**
+
+This categorical variable is suppose to contain the unique identifier of each row. However, the number of unique values do not match with the number of rows (5515 levels), so we can't really use it as an identifier. This variable does not have missing values.
+
+```{r}
+# Summary of the column
+summary(georgia$id)
+# Any missing values
+sum(is.na(georgia$id))
+# First five elements
+georgia$id[1:5]
+# Number of unique values
+length(unique(georgia$id))
+```
+
+**Variable 4: stateId**
+
+This numerical variable contains the id of the state of the rental house in USA. However, since we only have observations from Georgia state, all these ids are the same (Georgia state's id is 16 for all rows). And it has no missing values.
+
+```{r}
+# Summary of the column
+summary(georgia$stateId)
+# Any missing values
+sum(is.na(georgia$stateId))
+# First five elements
+georgia$stateId[1:5]
+# Number of unique values
+length(unique(georgia$stateId))
+
+hist(georgia$stateId, breaks = 20, freq = F)
+```
+
+**Variable 5: countyId**
+
+This numerical variable contains the id of counties in Georgia state. It has no missing values, and the number of unique values is slightly lower than the number of rows, which suggest some of the counties are used more than once. The data is not normally distributed and there is no presence of outliers.
+
+```{r}
+# Summary of the column
+summary(georgia$countyId)
+# Any missing values
+sum(is.na(georgia$countyId))
+# First five elements
+georgia$countyId[1:5]
+# Number of unique values
+length(unique(georgia$countyId))
+
+hist(georgia$countyId, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$countyId), sd(georgia$countyId)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+sci <- sample(georgia$countyId, 5000)
+shapiro.test(sci)
+
+# Boxplot to detect outliers
+Boxplot(georgia$countyId)
+```
+
+**Variable 6: cityId**
+
+This numerical variable contains the id of cities in Georgia state. These ids range from 0 to 397383, the number of unique ids is 374 and it has no missing values throughout the column. The data is not normally distributed and there are 144 extreme outliers, although it may not be very important, since it just indicates that there are 144 houses located in cities whose id has a high value.
+
+```{r}
+# Summary of the column
+out_ci <- summary(georgia$cityId)
+out_ci
+# Any missing values
+sum(is.na(georgia$cityId))
+# First five elements
+georgia$cityId[1:5]
+# Number of unique values
+length(unique(georgia$cityId))
+
+hist(georgia$cityId, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$cityId), sd(georgia$cityId)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+sci <- sample(georgia$cityId, 5000)
+shapiro.test(sci)
+
+# Boxplot to detect outliers
+boxplot(georgia$cityId)
+
+# Outliers
+iqr_ci <- out_ci[5] - out_ci[2]
+mild_lower <- out_ci[2] - 1.5 * iqr_ci
+mild_upper <- out_ci[5] + 1.5 * iqr_ci
+extreme_lower <- out_ci[2] - 3 * iqr_ci
+extreme_upper <- out_ci[5] + 3 * iqr_ci
+
+abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
+abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+
+# Compute number of extreme outliers
+num_extreme <- length(which(georgia$cityId < extreme_lower | georgia$cityId > extreme_upper))
+
+num_extreme
+```
+
+**Variable 7: country**
+
+This categorical variable contains the name of the country where the rental houses are found. Each house is geographically located in Georgia, a state in the USA, so its the same value for all the rows. This variable has no missing values.
+
+```{r}
+# Summary of the column
+summary(georgia$country)
+# Any missing values
+sum(is.na(georgia$country))
+# First five elements
+georgia$country[1:5]
+# Number of unique values
+length(unique(georgia$country))
+```
+
+**Variable 8: datePostedString**
+
+This variable was previously a categorical variable which contains the date when the rental house was published. We performed a conversion at the beginning to keep only the year. This variable has no missing values and most of the houses were posted on 2021, only a small number of them are posted 2020 (47).
+
+```{r}
+# Summary of the column
+summary(georgia$datePostedString)
+# Any missing values
+sum(is.na(georgia$datePostedString))
+# First five elements
+georgia$datePostedString[1:5]
+# Number of unique values
+length(unique(georgia$datePostedString))
+
+length(which(georgia$datePostedString != 2021))
+
+plot(factor(georgia$datePostedString))
+```
+
+**Variable 9: is_bankOwned**
+
+The variable is_bankOwned is a boolean variable that indicates whether the house is offered by a bank. This variable has no missing values and almost no house is owned by a bank, with exception of the observation 158.
+
+```{r}
+# Summary of the column
+summary(georgia$is_bankOwned)
+# Any missing values
+sum(is.na(georgia$is_bankOwned))
+# First five elements
+georgia$is_bankOwned[1:5]
+# Number of unique values
+length(unique(georgia$is_bankOwned))
+
+length(which(georgia$is_bankOwned != 0))
+# Houses owned by a bank
+which(georgia$is_bankOwned != 0)
+
+plot(factor(georgia$is_bankOwned))
+```
+
+**Variable 10: is_forAuction**
+
+The variable is_forAuction is almost identical to the previous column in terms of labels. It is also a boolean variable that indicates whether the house belongs to an auction. This variable has no missing values and no house is auctioned, with exception of the observation 3946.
+
+```{r}
+# Summary of the column
+summary(georgia$is_forAuction)
+# Any missing values
+sum(is.na(georgia$is_forAuction))
+# First five elements
+georgia$is_forAuction[1:5]
+# Number of unique values
+length(unique(georgia$is_forAuction))
+
+length(which(georgia$is_forAuction != 0))
+# Houses belong to an auction
+which(georgia$is_forAuction != 0)
+
+plot(factor(georgia$is_forAuction))
+```
+
+**Variable 11: event**
+
+The variable event is a categorical variable with 5 levels that indicates the sales type of each rental house. This variable has no missing values, around 5000 observations have "Listed for sale" and around 1000 have "Price change" in this variable. The rest of the labels have very low presence in the data.
+
+```{r}
+# Summary of the column
+summary(georgia$event)
+# Any missing values
+sum(is.na(georgia$event))
+# First five elements
+georgia$event[1:5]
+# Number of unique values
+length(unique(georgia$event))
+
+plot(factor(georgia$event))
+```
+
+**Variable 12: time**
+
+The variable time is a numerical variable indicating the time when the observation was collected. This variable has no missing values, but there are only 216 unique values. It's proved by the Shapiro test that it is not normally distributed and there are 454 extreme outliers.
+
+```{r}
+# Summary of the column
+out_ct <- summary(georgia$time)
+out_ct
+# Any missing values
+sum(is.na(georgia$time))
+# First five elements
+georgia$time[1:5]
+# Number of unique values
+length(unique(georgia$time))
+
+hist(georgia$time, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$time), sd(georgia$time)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+st <- sample(georgia$time, 5000)
+shapiro.test(st)
+
+# Boxplot to detect outliers
+boxplot(georgia$time)
+
+# Outliers
+iqr_t <- out_ct[5] - out_ct[2]
+mild_lower <- out_ct[2] - 1.5 * iqr_t
+mild_upper <- out_ct[5] + 1.5 * iqr_t
+extreme_lower <- out_ct[2] - 3 * iqr_t
+extreme_upper <- out_ct[5] + 3 * iqr_t
+
+abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
+abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+
+# Compute number of extreme outliers
+num_extreme <- length(which(georgia$time < extreme_lower | georgia$time > extreme_upper))
+
+num_extreme
+```
+
+**Variable 13: price**
+
+The variable price is a numerical variable indicating the price of the rental houses. It ranges from 6,250 USD to 1,300,000 USD. This variable has no missing values and there are 1227 unique values. It's distribution resembles that of a normal distribution, but the Shapiro test says the otherwise. Moreover, there are 43 extreme outliers in the data.
+
+```{r}
+# Summary of the column
+out_cp <- summary(georgia$price)
+out_cp
+# Any missing values
+sum(is.na(georgia$price))
+# First five elements
+georgia$price[1:5]
+# Number of unique values
+length(unique(georgia$price))
+
+hist(georgia$price, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$price), sd(georgia$price)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+sp <- sample(georgia$price, 5000)
+shapiro.test(sp)
+
+# Boxplot to detect outliers
+boxplot(georgia$price)
+
+# Outliers
+iqr_p <- out_cp[5] - out_cp[2]
+mild_lower <- out_cp[2] - 1.5 * iqr_p
+mild_upper <- out_cp[5] + 1.5 * iqr_p
+extreme_lower <- out_cp[2] - 3 * iqr_p
+extreme_upper <- out_cp[5] + 3 * iqr_p
+
+abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
+abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+
+# Compute number of extreme outliers
+num_extreme <- length(which(georgia$price < extreme_lower | georgia$price > extreme_upper))
+
+num_extreme
+```
+
+**Variable 13: pricePerSquareFoot**
+
+The variable pricePerSquareFoot is a numerical variable that, as its name indicates, it stores the price per square foot of the rental houses. It ranges from 4.0 sqft to 205.00 sqft. This variable has no missing values and there are 440 unique values. It's not normally distributed and there are some considerably high values that might be errors while collecting the data. Those values are most likely extreme outliers in the data, which are 56.
+
+```{r}
+# Summary of the column
+out_cppsf <- summary(georgia$pricePerSquareFoot)
+out_cppsf
+# Any missing values
+sum(is.na(georgia$pricePerSquareFoot))
+# First five elements
+georgia$pricePerSquareFoot[1:5]
+# Number of unique values
+length(unique(georgia$pricePerSquareFoot))
+
+hist(georgia$pricePerSquareFoot, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$pricePerSquareFoot), sd(georgia$pricePerSquareFoot)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+sppsf <- sample(georgia$pricePerSquareFoot, 5000)
+shapiro.test(sppsf)
+
+# Boxplot to detect outliers
+boxplot(georgia$pricePerSquareFoot)
+
+# Outliers
+iqr_ppsf <- out_cppsf[5] - out_cppsf[2]
+mild_lower <- out_cppsf[2] - 1.5 * iqr_ppsf
+mild_upper <- out_cppsf[5] + 1.5 * iqr_ppsf
+extreme_lower <- out_cppsf[2] - 3 * iqr_ppsf
+extreme_upper <- out_cppsf[5] + 3 * iqr_ppsf
+
+abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
+abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+
+# Compute number of extreme outliers
+num_extreme <- length(which(georgia$pricePerSquareFoot < extreme_lower | georgia$pricePerSquareFoot > extreme_upper))
+
+num_extreme
+```
+
+**Variable 14: city**
+
+The variable city is a categorical variable indicating the name of the city where the houses are located in. There are no missing data in the data and it has 383 unique values in this column. The most frequent city that appears in this data is Atlanta, followed by Marietta, Augusta, Columbus and Macon.
+
+```{r}
+# Summary of the column
+summary(georgia$city)
+# Any missing values
+sum(is.na(georgia$city))
+# First five elements
+georgia$city[1:5]
+# Number of unique values
+length(unique(georgia$city))
+
+plot(factor(georgia$city))
+sort(table(georgia$city), decreasing = TRUE)[1:5]
+```
+
+**Variable 15: state**
+
+This categorical variable contains the name of the state where the rental houses are found. Each house is geographically located in Georgia, so in this field we only have one value, which is Georgia, represented by GA. This variable has no missing values.
+
+```{r}
+# Summary of the column
+summary(georgia$state)
+# Any missing values
+sum(is.na(georgia$state))
+# First five elements
+georgia$state[1:5]
+# Number of unique values
+length(unique(georgia$state))
+```
+
+**Variable 16: yearBuilt**
+
+The variable yearBuilt is a numerical variable indicating the year when the house was built. This variable has no missing values and there are 159 unique values. It's proved by the Shapiro test that it is not normally distributed and there are 16 extreme outliers. Those outliers are irreal, the maximum value of the data is 9999.
+
+```{r}
+# Summary of the column
+out_cyb <- summary(georgia$yearBuilt)
+out_cyb
+# Any missing values
+sum(is.na(georgia$yearBuilt))
+# First five elements
+georgia$yearBuilt[1:5]
+# Number of unique values
+length(unique(georgia$yearBuilt))
+
+hist(georgia$yearBuilt, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$yearBuilt), sd(georgia$yearBuilt)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+syb <- sample(georgia$yearBuilt, 5000)
+shapiro.test(syb)
+
+# Boxplot to detect outliers
+boxplot(georgia$yearBuilt)
+
+# Outliers
+iqr_yb <- out_cyb[5] - out_cyb[2]
+mild_lower <- out_cyb[2] - 1.5 * iqr_yb
+mild_upper <- out_cyb[5] + 1.5 * iqr_yb
+extreme_lower <- out_cyb[2] - 3 * iqr_yb
+extreme_upper <- out_cyb[5] + 3 * iqr_yb
+
+abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
+abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+
+# Compute number of extreme outliers
+num_extreme <- length(which(georgia$yearBuilt < extreme_lower | georgia$yearBuilt > extreme_upper))
+
+num_extreme
+```
+
+**Variable 17: streetAddress**
+
+This categorical variable contains the street address of the rental houses. There are no missing values and there are 5514 levels, meaning some houses are geographically located in the same street.
+
+```{r}
+# Summary of the column
+summary(georgia$streetAddress)
+# Any missing values
+sum(is.na(georgia$streetAddress))
+# First five elements
+georgia$streetAddress[1:5]
+# Number of unique values
+length(unique(georgia$streetAddress))
+```
+
+**Variable 18: zipcode**
+
+Zipcode is a numerical variable containing the zipcode of each rental house. There are no missing values and there are 446 unique numerical values. The data is not normally distributed (confirmed by the Shapiro test). In this case we do not have any extreme outliers, but we do have 331 mild outliers.
+
+```{r}
+# Summary of the column
+out_czc <- summary(georgia$zipcode)
+out_czc
+# Any missing values
+sum(is.na(georgia$zipcode))
+# First five elements
+georgia$zipcode[1:5]
+# Number of unique values
+length(unique(georgia$zipcode))
+
+hist(georgia$zipcode, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$zipcode), sd(georgia$zipcode)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+szc <- sample(georgia$zipcode, 5000)
+shapiro.test(szc)
+
+# Boxplot to detect outliers
+boxplot(georgia$zipcode)
+
+# Outliers
+iqr_yzc <- out_czc[5] - out_czc[2]
+mild_lower <- out_czc[2] - 1.5 * iqr_yzc
+mild_upper <- out_czc[5] + 1.5 * iqr_yzc
+extreme_lower <- out_czc[2] - 3 * iqr_yzc
+extreme_upper <- out_czc[5] + 3 * iqr_yzc
+
+abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
+abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+
+# Compute number of mild outliers
+num_mild <- length(which(georgia$zipcode < mild_lower | georgia$zipcode > mild_upper))
+
+num_mild
+```
+
+**Variable 19: longitude**
+
+The numerical variable longitude contains the longitude of each of the rental houses. There are no missing values and there are 5437 unique numerical values. The data is not normally distributed (confirmed by the Shapiro test) and ranges from -85.57 to -80.97. In addition, there are 97 extreme outliers.
+
+```{r}
+# Summary of the column
+out_clg <- summary(georgia$longitude)
+out_clg
+# Any missing values
+sum(is.na(georgia$longitude))
+# First five elements
+georgia$longitude[1:5]
+# Number of unique values
+length(unique(georgia$longitude))
+
+hist(georgia$longitude, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$longitude), sd(georgia$longitude)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+slg <- sample(georgia$longitude, 5000)
+shapiro.test(slg)
+
+# Boxplot to detect outliers
+boxplot(georgia$longitude)
+
+# Outliers
+iqr_ylg <- out_clg[5] - out_clg[2]
+mild_lower <- out_clg[2] - 1.5 * iqr_ylg
+mild_upper <- out_clg[5] + 1.5 * iqr_ylg
+extreme_lower <- out_clg[2] - 3 * iqr_ylg
+extreme_upper <- out_clg[5] + 3 * iqr_ylg
+
+abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
+abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+
+# Compute number of extreme outliers
+num_extreme <- length(which(georgia$longitude < extreme_lower | georgia$longitude > extreme_upper))
+
+num_extreme
+```
+
+**Variable 20: latitude**
+
+The numerical variable latitude contains the latitude of each of the rental houses. There are no missing values and there are 5455 unique numerical values. The data is not normally distributed (confirmed by the Shapiro test) and ranges from 30.73 to 34.99. In addition, there are 9782 extreme outliers.
+
+```{r}
+# Summary of the column
+out_clt <- summary(georgia$latitude)
+out_clt
+# Any missing values
+sum(is.na(georgia$latitude))
+# First five elements
+georgia$latitude[1:5]
+# Number of unique values
+length(unique(georgia$latitude))
+
+hist(georgia$latitude, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$latitude), sd(georgia$latitude)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+slt <- sample(georgia$latitude, 5000)
+shapiro.test(slt)
+
+# Boxplot to detect outliers
+boxplot(georgia$latitude)
+
+# Outliers
+iqr_ylt <- out_clt[5] - out_clt[2]
+mild_lower <- out_clt[2] - 1.5 * iqr_ylt
+mild_upper <- out_clt[5] + 1.5 * iqr_ylt
+extreme_lower <- out_clt[2] - 3 * iqr_ylt
+extreme_upper <- out_clt[5] + 3 * iqr_ylt
+
+abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
+abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+
+# Compute number of extreme outliers
+num_extreme <- length(which(georgia$latitude < extreme_lower | georgia$latitude > extreme_upper))
+
+num_extreme
+```
+
+**Variable 21: hasBadGeoCode**
+
 ## Data Cleaning
+
+```{r}
+# We store the cleaned version of the data here
+filtered_georgia <- georgia
+```
 
 ```{r}
 # First, let's check if there is any missing values in the datase
 sum(is.na(georgia)) # There are no NAs in the dataset
 ```
 
-
 ```{r}
 # Next, we should filter and remove all observations that were not posted in 2021 and some validation based on common sense like bathrooms and bedrooms should be higher than 0.
 georgia_2021_only <- georgia %>%
-  filter(year(datePostedString) == 2021, bathrooms > 0, bedrooms > 0, price > 0) %>%
+  filter(year(datePostedString) == 2021) %>%
   distinct() # Retain unique rows
 
 # While there are obs where the number of bathrooms and bedrooms is 0, there are no obs where the price is lower o equal to 0: length(which(georgia$price > 0)) == 6168
@@ -217,12 +805,7 @@ georgia_value_rem <- georgia_value_rem %>%
 
 \newpage
 
-Explanatory Data Analysis
-
-In this section, we perform a crucial step in any data science project, especially when preparing data for modeling. A comprehensive descriptive analysis is carried out for each variable, emphasizing their most relevant characteristics. We proceed with a column-by-column examination of the dataset, followed by the generation of a data quality report. Subsequently, we prepare the data for the modeling phase by handling missing values through imputation techniques, removing non-informative variables, and creating new derived features where appropriate.
-
 It is important to note that the explanatory data analysis is conducted exclusively on the training dataset. However, the creation and removal of variables derived from this process also affect the test dataset to ensure consistency across both sets.
-
 
 Univariate Descriptive Analysis
 
