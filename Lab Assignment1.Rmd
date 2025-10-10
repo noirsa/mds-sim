@@ -132,7 +132,7 @@ Boxplot(georgia$X)
 
 **Variable 3: id**
 
-This categorical variable is suppose to contain the unique identifier of each row. However, the number of unique values do not match with the number of rows (5515 levels), so we can't really use it as an identifier. This variable does not have missing values.
+This categorical variable is suppose to contain the unique identifier of each row. This variable does not have missing values. However, the number of unique values (5515 levels) do not match with the number of rows (6168 rows), so we can't really use it as an identifier in that regard. Nonetheless, there is another possibility that the dataset contains duplicated rows. And it happens that our idea's hit the bull's eye, it is true that the rows with the same ids are duplicated, most of their variables are the same with exception of the columns X.1, X and countyId. However, we also find out that not all rows with the same id are equal in terms of other variables, there are some which are likely to have errors in variables like garageSpaces, hasGarage and so on. But only 25 ids out of 653 duplicated ids show that pattern.
 
 ```{r}
 # Summary of the column
@@ -143,6 +143,45 @@ sum(is.na(georgia$id))
 georgia$id[1:5]
 # Number of unique values
 length(unique(georgia$id))
+
+# Get duplicated ids
+non_unique_ids <- georgia$id[duplicated(georgia$id)]
+length(non_unique_ids)
+
+# Observations with the same id are equal in most of the variables
+which(georgia$id == non_unique_ids[1])
+
+# obs 19 vs obs 5718
+georgia[c(2975, 4502),]
+
+# Let's try another pair
+which(georgia$id == non_unique_ids[2])
+
+# obs 19 vs obs 5718
+georgia[c(1212, 4505),]
+
+# Ignore the columsn X.1, X and countyId
+ignore_cols <- c("X.1", "X", "countyId")
+compare_cols <- setdiff(names(georgia), c(ignore_cols))
+
+# For each duplicated id, check if all its rows are identical
+same_rows <- sapply(non_unique_ids, function(idv) {
+  sub <- georgia[georgia$id == idv, compare_cols, drop = FALSE]
+  # All rows identical if only 1 unique row remains after removing duplicates
+  nrow(unique(sub)) == 1
+})
+
+# Are all duplicates identical?
+all(same_rows) # No
+
+# Show two duplicates with different values in those variables
+singular_ids <- names(same_rows)[which(same_rows == FALSE)]
+georgia[which(georgia$id == singular_ids[1]),]
+georgia[which(georgia$id == singular_ids[2]),]
+
+# Number of singular ids
+length(singular_ids)
+
 ```
 
 **Variable 4: stateId**
@@ -403,7 +442,7 @@ num_extreme <- length(which(georgia$price < extreme_lower | georgia$price > extr
 num_extreme
 ```
 
-**Variable 13: pricePerSquareFoot**
+**Variable 14: pricePerSquareFoot**
 
 The variable pricePerSquareFoot is a numerical variable that, as its name indicates, it stores the price per square foot of the rental houses. It ranges from 4.0 sqft to 205.00 sqft. This variable has no missing values and there are 440 unique values. It's not normally distributed and there are some considerably high values that might be errors while collecting the data. Those values are most likely extreme outliers in the data, which are 56.
 
@@ -444,7 +483,7 @@ num_extreme <- length(which(georgia$pricePerSquareFoot < extreme_lower | georgia
 num_extreme
 ```
 
-**Variable 14: city**
+**Variable 15: city**
 
 The variable city is a categorical variable indicating the name of the city where the houses are located in. There are no missing data in the data and it has 383 unique values in this column. The most frequent city that appears in this data is Atlanta, followed by Marietta, Augusta, Columbus and Macon.
 
@@ -462,7 +501,7 @@ plot(factor(georgia$city))
 sort(table(georgia$city), decreasing = TRUE)[1:5]
 ```
 
-**Variable 15: state**
+**Variable 16: state**
 
 This categorical variable contains the name of the state where the rental houses are found. Each house is geographically located in Georgia, so in this field we only have one value, which is Georgia, represented by GA. This variable has no missing values.
 
@@ -477,7 +516,7 @@ georgia$state[1:5]
 length(unique(georgia$state))
 ```
 
-**Variable 16: yearBuilt**
+**Variable 17: yearBuilt**
 
 The variable yearBuilt is a numerical variable indicating the year when the house was built. This variable has no missing values and there are 159 unique values. It's proved by the Shapiro test that it is not normally distributed and there are 16 extreme outliers. Those outliers are irreal, the maximum value of the data is 9999.
 
@@ -518,7 +557,7 @@ num_extreme <- length(which(georgia$yearBuilt < extreme_lower | georgia$yearBuil
 num_extreme
 ```
 
-**Variable 17: streetAddress**
+**Variable 18: streetAddress**
 
 This categorical variable contains the street address of the rental houses. There are no missing values and there are 5514 levels, meaning some houses are geographically located in the same street.
 
@@ -533,7 +572,7 @@ georgia$streetAddress[1:5]
 length(unique(georgia$streetAddress))
 ```
 
-**Variable 18: zipcode**
+**Variable 19: zipcode**
 
 Zipcode is a numerical variable containing the zipcode of each rental house. There are no missing values and there are 446 unique numerical values. The data is not normally distributed (confirmed by the Shapiro test). In this case we do not have any extreme outliers, but we do have 331 mild outliers.
 
@@ -574,7 +613,7 @@ num_mild <- length(which(georgia$zipcode < mild_lower | georgia$zipcode > mild_u
 num_mild
 ```
 
-**Variable 19: longitude**
+**Variable 20: longitude**
 
 The numerical variable longitude contains the longitude of each of the rental houses. There are no missing values and there are 5437 unique numerical values. The data is not normally distributed (confirmed by the Shapiro test) and ranges from -85.57 to -80.97. In addition, there are 97 extreme outliers.
 
@@ -615,7 +654,7 @@ num_extreme <- length(which(georgia$longitude < extreme_lower | georgia$longitud
 num_extreme
 ```
 
-**Variable 20: latitude**
+**Variable 21: latitude**
 
 The numerical variable latitude contains the latitude of each of the rental houses. There are no missing values and there are 5455 unique numerical values. The data is not normally distributed (confirmed by the Shapiro test) and ranges from 30.73 to 34.99. In addition, there are 9782 extreme outliers.
 
@@ -656,7 +695,415 @@ num_extreme <- length(which(georgia$latitude < extreme_lower | georgia$latitude 
 num_extreme
 ```
 
-**Variable 21: hasBadGeoCode**
+**Variable 22: hasBadGeocode**
+
+This boolean variable indicates whether a row has bad geocode. Geocode allows we to take each observation's information and create a map of their locations. There are no missing values in the data, but there are only 0s thoughout the column, in other words, there are no observation with bad geocode, since we can determine the location of each house using the longitude and latitude columns in the dataset.
+
+```{r}
+# Summary of the column
+summary(georgia$hasBadGeocode)
+# Any missing values
+sum(is.na(georgia$hasBadGeocode))
+# First five elements
+georgia$hasBadGeocode[1:5]
+# Number of unique values
+length(unique(georgia$hasBadGeocode))
+
+hist(georgia$hasBadGeocode, breaks = 20, freq = F)
+```
+
+**Variable 23: description**
+
+This categorical variable contains a textual description provided by the sellers of the rental houses. There are no missing values in the data, but not all descriptions are unique (unique values = 5429), there are some rows that share the same descriptions. This reminds us of the analysis we did with the variable 3: id. We found out that there are some observations with the same observations are equal in most of the variables, but there are some that do not follow that pattern. Maybe the sellers were so lazy that they copied and pasted one of the description they had on their hand on similar rental houses' posts.
+
+```{r}
+# Summary of the column
+summary(georgia$description)
+# Any missing values
+sum(is.na(georgia$description))
+# First five elements
+georgia$description[1]
+# Number of unique values
+length(unique(georgia$description))
+
+# Get duplicated descriptions
+duplicated_descriptions <- georgia[duplicated(georgia$description) | duplicated(georgia$description, fromLast = TRUE), ]
+
+# Some observations with the same description are equal in most of the variables
+which(georgia$description == duplicated_descriptions$description[1])
+
+# obs 19 vs obs 5718
+georgia[c(19, 5718),]
+
+# Not all observations with the same description are equal
+which(georgia$description == duplicated_descriptions$description[6])
+
+# obs 60 vs obs 174
+georgia[c(60, 174),]
+```
+
+**Variable 24: currency**
+
+This categorical variable contains the currency used in each of the observations. However, since we only have observations from Georgia state, the currency in each row is USA. And it has no missing values.
+
+```{r}
+# Summary of the column
+summary(georgia$currency)
+# Any missing values
+sum(is.na(georgia$currency))
+# First five elements
+georgia$currency[1:5]
+# Number of unique values
+length(unique(georgia$currency))
+```
+
+**Variable 25: livingArea**
+
+This numerical variable contains the living are of the rental houses in sqft. There are no missing values and it's not normally distributed. There are in total 2601 unique values in the data. In addition, 9 extreme outliers are found, each of them are above 7000 sqft.
+
+```{r}
+# Summary of the column
+out_cla <- summary(georgia$livingArea)
+out_cla
+# Any missing values
+sum(is.na(georgia$livingArea))
+# First five elements
+georgia$livingArea[1:5]
+# Number of unique values
+length(unique(georgia$livingArea))
+
+hist(georgia$livingArea, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$livingArea), sd(georgia$livingArea)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+sla <- sample(georgia$livingArea, 5000)
+shapiro.test(sla)
+
+# Boxplot to detect outliers
+boxplot(georgia$livingArea)
+
+# Outliers
+iqr_yla <- out_cla[5] - out_cla[2]
+mild_lower <- out_cla[2] - 1.5 * iqr_yla
+mild_upper <- out_cla[5] + 1.5 * iqr_yla
+extreme_lower <- out_cla[2] - 3 * iqr_yla
+extreme_upper <- out_cla[5] + 3 * iqr_yla
+
+abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
+abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+
+# Compute number of extreme outliers
+num_extreme <- length(which(georgia$livingArea < extreme_lower | georgia$livingArea > extreme_upper))
+
+num_extreme
+```
+
+**Variable 26: livingAreaValue**
+
+This numerical variable contains exactly the same values as the previous one, they are actually the same columns with a different column name.
+
+```{r}
+# Whether these two columns are equal
+all(georgia$livingArea == georgia$livingAreaValue)
+```
+**Variable 27: bathrooms**
+
+This numerical variable indicates the number of bathrooms each one of the rental houses has. There are no missing values and it's not normally distributed. Thre are 11 unique values and 35 extreme outliers (> 6 bathrooms).
+
+```{r}
+# Summary of the column
+out_cb <- summary(georgia$bathrooms)
+out_cb
+# Any missing values
+sum(is.na(georgia$bathrooms))
+# First five elements
+georgia$bathrooms[1:5]
+# Number of unique values
+length(unique(georgia$bathrooms))
+
+hist(georgia$bathrooms, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$bathrooms), sd(georgia$bathrooms)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+sb <- sample(georgia$bathrooms, 5000)
+shapiro.test(sb)
+
+# Boxplot to detect outliers
+boxplot(georgia$bathrooms)
+
+# Outliers
+iqr_yb <- out_cb[5] - out_cb[2]
+mild_lower <- out_cb[2] - 1.5 * iqr_yb
+mild_upper <- out_cb[5] + 1.5 * iqr_yb
+extreme_lower <- out_cb[2] - 3 * iqr_yb
+extreme_upper <- out_cb[5] + 3 * iqr_yb
+
+abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
+abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+
+# Compute number of extreme outliers
+num_extreme <- length(which(georgia$bathrooms < extreme_lower | georgia$bathrooms > extreme_upper))
+
+num_extreme
+```
+
+**Variable 28: bedrooms**
+
+This numerical variable indicates the number of bedrooms each one of the rental houses has. There are no missing values and it's not normally distributed. Thre are 12 unique values and 18 extreme outliers (> 7 bedrooms).
+
+```{r}
+# Summary of the column
+out_cbd <- summary(georgia$bedrooms)
+out_cbd
+# Any missing values
+sum(is.na(georgia$bedrooms))
+# First five elements
+georgia$bedrooms[1:5]
+# Number of unique values
+length(unique(georgia$bedrooms))
+
+hist(georgia$bedrooms, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$bedrooms), sd(georgia$bedrooms)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+sbd <- sample(georgia$bedrooms, 5000)
+shapiro.test(sbd)
+
+# Boxplot to detect outliers
+boxplot(georgia$bedrooms)
+
+# Outliers
+iqr_ybd <- out_cbd[5] - out_cbd[2]
+mild_lower <- out_cbd[2] - 1.5 * iqr_ybd
+mild_upper <- out_cbd[5] + 1.5 * iqr_ybd
+extreme_lower <- out_cbd[2] - 3 * iqr_ybd
+extreme_upper <- out_cbd[5] + 3 * iqr_ybd
+
+abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
+abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+
+# Compute number of extreme outliers
+num_extreme <- length(which(georgia$bedrooms < extreme_lower | georgia$bedrooms > extreme_upper))
+
+num_extreme
+```
+
+**Variable 29: buildingArea**
+
+This numerical variable contains exactly the same values as the variables 24 and 25 (livingArea and livingAreaValue), they are actually the same columns with a different column name.
+
+```{r}
+# Whether these two columns are equal
+all(georgia$livingAreaValue == georgia$buildingArea)
+```
+
+**Variable 30: parking**
+
+The variable parking is a boolean variable that indicates whether the house offers parking. This variable has no missing values. The number of houses with parking (4711) exceeds the number of those which have not (1457).
+
+```{r}
+# Summary of the column
+summary(georgia$parking)
+# Any missing values
+sum(is.na(georgia$parking))
+# First five elements
+georgia$parking[1:5]
+# Number of unique values
+length(unique(georgia$parking))
+
+plot(factor(georgia$parking))
+```
+
+**Variable 31: garageSpaces**
+
+The variable garageSpaces is a numerical variable that indicates the number of garage spaces in the house. This variable has no missing values and there are 8 unique values from 0 to 7. It's not normally distributed and there are no extreme outliers, but it has 5 mild outliers (> 5 garage spaces).
+
+```{r}
+# Summary of the column
+out_cgs <- summary(georgia$garageSpaces)
+out_cgs
+# Any missing values
+sum(is.na(georgia$garageSpaces))
+# First five elements
+georgia$garageSpaces[1:5]
+# Number of unique values
+length(unique(georgia$garageSpaces))
+
+hist(georgia$garageSpaces, breaks = 20, freq = F)
+curve(dnorm(x, mean(georgia$garageSpaces), sd(georgia$garageSpaces)), add = T)
+
+# Shapiro test only accepts sample sizes between 3 and 5000
+sgs <- sample(georgia$garageSpaces, 5000)
+shapiro.test(sgs)
+
+# Boxplot to detect outliers
+boxplot(georgia$garageSpaces)
+
+# Outliers
+iqr_ygs <- out_cgs[5] - out_cgs[2]
+mild_lower <- out_cgs[2] - 1.5 * iqr_ygs
+mild_upper <- out_cgs[5] + 1.5 * iqr_ygs
+extreme_lower <- out_cgs[2] - 3 * iqr_ygs
+extreme_upper <- out_cgs[5] + 3 * iqr_ygs
+
+abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
+abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+
+# Compute number of mild outliers
+num_mild <- length(which(georgia$garageSpaces < mild_lower | georgia$garageSpaces > mild_upper))
+
+num_mild
+```
+
+**Variable 32: hasGarage**
+
+The variable hasGarage is a boolean variable that indicates whether the house has a garage. This variable has no missing values. The number of houses with a garage (3821) exceeds the number of those which have not (2347).
+
+```{r}
+# Summary of the column
+summary(georgia$hasGarage)
+# Any missing values
+sum(is.na(georgia$hasGarage))
+# First five elements
+georgia$hasGarage[1:5]
+# Number of unique values
+length(unique(georgia$hasGarage))
+
+plot(factor(georgia$hasGarage))
+
+# Is there a house where the variable hasGarage is 0 and there are more than 0 garageSpaces?
+which(georgia$garageSpaces > 0 & georgia$hasGarage == 0)
+```
+
+**Variable 33: levels**
+
+The variable levels is a categorical variable that indicates the levels of the buildings. This variable has no missing values and it has 35 unique values. However, this variable is a bit messy, there are a lot of repeated labels, they may be written differently, but in fact, they have the same meaning. For instance, the label "3 Story" matches with "Tri-level".
+
+```{r}
+# Summary of the column
+summary(georgia$levels)
+# Any missing values
+sum(is.na(georgia$levels))
+# First five elements
+georgia$levels[1:5]
+# Number of unique values
+length(unique(georgia$levels))
+
+# Show all levels
+unique(georgia$levels)
+```
+
+**Variable 34: pool**
+
+The variable pool is a boolean variable that indicates whether the house has a pool This variable has no missing values. Only 438 observations out of 6168 have a pool.
+
+```{r}
+# Summary of the column
+summary(georgia$pool)
+# Any missing values
+sum(is.na(georgia$pool))
+# First five elements
+georgia$pool[1:5]
+# Number of unique values
+length(unique(georgia$pool))
+
+plot(factor(georgia$pool))
+
+# Number of houses with pool
+length(which(georgia$pool == 1))
+```
+
+**Variable 35: spa**
+
+The variable spa is a boolean variable that indicates whether the house has spa This variable has no missing values. Only 644 observations out of 6168 have spa.
+
+```{r}
+# Summary of the column
+summary(georgia$spa)
+# Any missing values
+sum(is.na(georgia$spa))
+# First five elements
+georgia$spa[1:5]
+# Number of unique values
+length(unique(georgia$spa))
+
+plot(factor(georgia$spa))
+
+# Number of houses with spa
+length(which(georgia$spa == 1))
+```
+
+**Variable 36: isNewConstruction**
+
+The variable isNewConstruction is a boolean variable that indicates whether a rental house is a new building. There are no missing values and only 388 observations out of 6168 are new.
+
+```{r}
+# Summary of the column
+summary(georgia$isNewConstruction)
+# Any missing values
+sum(is.na(georgia$isNewConstruction))
+# First five elements
+georgia$isNewConstruction[1:5]
+# Number of unique values
+length(unique(georgia$isNewConstruction))
+
+plot(factor(georgia$isNewConstruction))
+
+# Number of new constructed houses
+length(which(georgia$isNewConstruction == 1))
+```
+
+**Variable 37: hasPetsAllowed**
+
+The variable hasPetsAllowed is a boolean variable that indicates whether it is allowed to have pets in the rental houses. There are no missing values and only 51 houses out of 6168 allow pets.
+
+```{r}
+# Summary of the column
+summary(georgia$hasPetsAllowed)
+# Any missing values
+sum(is.na(georgia$hasPetsAllowed))
+# First five elements
+georgia$hasPetsAllowed[1:5]
+# Number of unique values
+length(unique(georgia$hasPetsAllowed))
+
+plot(factor(georgia$hasPetsAllowed), )
+
+# Number of pets allowing houses
+length(which(georgia$hasPetsAllowed == 1))
+```
+
+**Variable 38: homeType**
+
+The variable homeType is a categorical variable that indicates the type of the rental houses. This variable has 5 unique values and there are no missing values. The type "SINGLE_FAMILY" is predominant in the data, the rest of the labels have low presence throughout the data.
+
+```{r}
+# Summary of the column
+summary(georgia$homeType)
+# Any missing values
+sum(is.na(georgia$homeType))
+# First five elements
+georgia$homeType[1:5]
+# Number of unique values
+length(unique(georgia$homeType))
+
+plot(factor(georgia$homeType))
+```
+
+**Variable 39: county**
+
+The variable county is a categorical variable that indicates the county in Georgia state where the building is located. This variable has 129 unique values and there are no missing values.
+
+```{r}
+# Summary of the column
+summary(georgia$county)
+# Any missing values
+sum(is.na(georgia$county))
+# First five elements
+georgia$county[1:5]
+# Number of unique values
+length(unique(georgia$county))
+```
 
 ## Data Cleaning
 
