@@ -74,15 +74,65 @@ summary(georgia)
 # Converting the date column to numeric
 georgia$datePostedString <- as.Date(georgia$datePostedString, format = "%Y-%m-%d")
 georgia$datePostedString <- as.numeric(format(georgia$datePostedString, "%Y"))
+
+```
+There are 47 records that were not posted in 2021.
+```{r}
+# Retain all data have datePostedString == 2021
+nrow(georgia) - sum(georgia$datePostedString == "2021")
+georgia2021 <- georgia[georgia$datePostedString == 2021,]
 ```
 
 ## 1. Explanatory Data Analysis
 
 In this section, we perform a crucial step in any data science project, especially when preparing data for modeling. A comprehensive descriptive analysis is carried out for each variable, emphasizing their most relevant characteristics. We proceed with a column-by-column examination of the dataset, followed by the generation of a data quality report. Subsequently, we prepare the data for the modeling phase by handling missing values through imputation techniques, removing non-informative variables, and creating new derived features where appropriate.
 
+The function we need for EDA process
+```{r}
+# Use given Q1 & Q3 to compute indexes of outliers
+calculate_outliers <- function(x) {
+  # Check for regular outliers
+  Boxplot(variable, main = "Boxplot")
+  outliers <- boxplot.stats(x)$out
+
+  # Compute quartiles and IQR
+  Q1 <- quantile(x, 0.25, na.rm = TRUE)
+  Q3 <- quantile(x, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+
+  # Define thresholds
+  lower_mild <- Q1 - 1.5 * IQR
+  upper_mild <- Q3 + 1.5 * IQR
+  lower_extreme <- Q1 - 3 * IQR
+  upper_extreme <- Q3 + 3 * IQR
+
+  # Identify mild and extreme outliers
+  mild_idx <- which((x < lower_mild | x > upper_mild))
+  extreme_idx <- which((x < lower_extreme | x > upper_extreme))
+  
+  # Count
+  num_mild <- length(mild_idx)
+  num_extreme <- length(extreme_idx)
+
+  
+
+  # Return the results as a list
+  return(list(
+    num_mild = num_mild,
+    num_extreme = num_extreme,
+    mild_indexes = mild_idx,
+    extreme_indexes = extreme_idx
+  ))
+}
+```
+
 **Variable 1: X.1**
 
-X.1 is a numerical variable without missing values. By using a histogram, it is clear that the data contains a unique id for each of the observations, since the number of unique values in the column is the same as the number of rows. Even though, it's obvious that the data is not normally distributed, we performed the shapiro test to confirm that. It contains no missing values thus imputation is not needed. This variable does not contain any outliers. Interestingly, the maximum value (6468) in the data does not match the number of columns (6168), maybe these ids belong to the observations of the original dataset where rental houses from other states are also stored.
+Variable X.1 is a numerical variable with no missing values.
+A quick inspection reveals that it serves as a unique identifier for each observation, since the number of unique values equals the total number of rows.
+Therefore, this variable does not contain meaningful numerical information for statistical analysis.
+Normality and outlier tests were not performed, as the variable is an ID rather than a continuous numeric feature.
+It contains no missing values thus imputation is not needed. This variable does not contain any outliers. Interestingly, the maximum value (6468) in the data does not match the number of columns (6168), maybe these ids belong to the observations of the original dataset where rental houses from other states are also stored.
 
 ```{r}
 # Summary of the column
@@ -92,17 +142,9 @@ sum(is.na(georgia$X.1))
 # First five elements
 georgia$X.1[1:5]
 # Number of unique values
-length(unique(georgia$X.1))
-
-hist(georgia$X.1, breaks = 20, freq = F) 
-curve(dnorm(x, mean(georgia$X.1), sd(georgia$X.1)), add = T)
-
-# Shapiro test only accepts sample sizes between 3 and 5000
-sx1 <- sample(georgia$X.1, 5000)
-shapiro.test(sx1)
-
-# Boxplot to detect outliers
-Boxplot(georgia$X.1)
+unique_counts<-length(unique(georgia$X.1))
+# Verify if all values are unique
+unique_counts == nrow(georgia)
 ```
 
 **Variable 2: X**
@@ -117,22 +159,19 @@ sum(is.na(georgia$X))
 # First five elements
 georgia$X[1:5]
 # Number of unique values
-length(unique(georgia$X))
+unique_counts<-length(unique(georgia$X))
+# Verify if all values are unique
+unique_counts == nrow(georgia)
 
-hist(georgia$X, breaks = 20, freq = F) 
-curve(dnorm(x, mean(georgia$X), sd(georgia$X)), add = T)
 
-# Shapiro test only accepts sample sizes between 3 and 5000
-sx <- sample(georgia$X, 5000)
-shapiro.test(sx)
-
-# Boxplot to detect outliers
-Boxplot(georgia$X)
 ```
 
 **Variable 3: id**
 
-This categorical variable is suppose to contain the unique identifier of each row. This variable does not have missing values. However, the number of unique values (5515 levels) do not match with the number of rows (6168 rows), so we can't really use it as an identifier in that regard. Nonetheless, there is another possibility that the dataset contains duplicated rows. And it happens that our idea's hit the bull's eye, it is true that the rows with the same ids are duplicated, most of their variables are the same with exception of the columns X.1, X and countyId. However, we also find out that not all rows with the same id are equal in terms of other variables, there are some which are likely to have errors in variables like garageSpaces, hasGarage and so on. But only 25 ids out of 653 duplicated ids show that pattern.
+This categorical variable is suppose to contain the unique identifier of each row.
+This variable does not have missing values. However, the number of unique values (5515 levels) do not match with the number of rows (6168 rows), so we can't really use it as an identifier in that regard.
+Nonetheless, there is another possibility that the dataset contains duplicated rows. And it happens that our idea's hit the bull's eye, it is true that the rows with the same ids are duplicated, most of their variables are the same with exception of the columns X.1, X and countyId.
+However, we also find out that not all rows with the same id are equal in terms of other variables, there are some which are likely to have errors in variables like garageSpaces, hasGarage and so on. But only 25 ids out of 653 duplicated ids show that pattern.
 
 ```{r}
 # Summary of the column
@@ -182,6 +221,8 @@ georgia[which(georgia$id == singular_ids[2]),]
 # Number of singular ids
 length(singular_ids)
 
+
+
 ```
 
 **Variable 4: stateId**
@@ -198,7 +239,9 @@ georgia$stateId[1:5]
 # Number of unique values
 length(unique(georgia$stateId))
 
-hist(georgia$stateId, breaks = 20, freq = F)
+# Check frequency
+table(georgia$stateId)
+
 ```
 
 **Variable 5: countyId**
@@ -212,6 +255,7 @@ summary(georgia$countyId)
 sum(is.na(georgia$countyId))
 # First five elements
 georgia$countyId[1:5]
+
 # Number of unique values
 length(unique(georgia$countyId))
 
@@ -228,8 +272,7 @@ Boxplot(georgia$countyId)
 
 **Variable 6: cityId**
 
-This numerical variable contains the id of cities in Georgia state. These ids range from 0 to 397383, the number of unique ids is 374 and it has no missing values throughout the column. The data is not normally distributed and there are 144 extreme outliers, although it may not be very important, since it just indicates that there are 144 houses located in cities whose id has a high value.
-
+This numerical variable represents the unique identifiers for cities in the state of Georgia. The cityId values range from 0 to 397,383, with 374 unique values. Notably, there are 340 occurrences of the value 0, which might indicate missing data.
 ```{r}
 # Summary of the column
 out_ci <- summary(georgia$cityId)
@@ -241,30 +284,9 @@ georgia$cityId[1:5]
 # Number of unique values
 length(unique(georgia$cityId))
 
-hist(georgia$cityId, breaks = 20, freq = F)
-curve(dnorm(x, mean(georgia$cityId), sd(georgia$cityId)), add = T)
+# Check frequency
+table(georgia$cityId)
 
-# Shapiro test only accepts sample sizes between 3 and 5000
-sci <- sample(georgia$cityId, 5000)
-shapiro.test(sci)
-
-# Boxplot to detect outliers
-boxplot(georgia$cityId)
-
-# Outliers
-iqr_ci <- out_ci[5] - out_ci[2]
-mild_lower <- out_ci[2] - 1.5 * iqr_ci
-mild_upper <- out_ci[5] + 1.5 * iqr_ci
-extreme_lower <- out_ci[2] - 3 * iqr_ci
-extreme_upper <- out_ci[5] + 3 * iqr_ci
-
-abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
-abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
-
-# Compute number of extreme outliers
-num_extreme <- length(which(georgia$cityId < extreme_lower | georgia$cityId > extreme_upper))
-
-num_extreme
 ```
 
 **Variable 7: country**
@@ -280,6 +302,9 @@ sum(is.na(georgia$country))
 georgia$country[1:5]
 # Number of unique values
 length(unique(georgia$country))
+# Check frequency
+table(georgia$country)
+
 ```
 
 **Variable 8: datePostedString**
@@ -348,8 +373,7 @@ plot(factor(georgia$is_forAuction))
 The variable event is a categorical variable with 5 levels that indicates the sales type of each rental house. This variable has no missing values, around 5000 observations have "Listed for sale" and around 1000 have "Price change" in this variable. The rest of the labels have very low presence in the data.
 
 ```{r}
-# Summary of the column
-summary(georgia$event)
+
 # Any missing values
 sum(is.na(georgia$event))
 # First five elements
@@ -357,13 +381,16 @@ georgia$event[1:5]
 # Number of unique values
 length(unique(georgia$event))
 
+# Convert 'event' to factor for better handling as categorical variable
+georgia$event <- factor(georgia$event)
+# Summary of the column
+summary(georgia$event)
 plot(factor(georgia$event))
 ```
 
 **Variable 12: time**
 
-The variable time is a numerical variable indicating the time when the observation was collected. This variable has no missing values, but there are only 216 unique values. It's proved by the Shapiro test that it is not normally distributed and there are 454 extreme outliers.
-
+The time variable is a numerical variable representing the timestamp when each observation was collected. This variable has no missing values and contains 216 unique timestamps. The data was collected after 2021.
 ```{r}
 # Summary of the column
 out_ct <- summary(georgia$time)
@@ -376,29 +403,13 @@ georgia$time[1:5]
 length(unique(georgia$time))
 
 hist(georgia$time, breaks = 20, freq = F)
-curve(dnorm(x, mean(georgia$time), sd(georgia$time)), add = T)
+# Check for any duplicate timestamps (indicating possible data duplication)
+sum(duplicated(georgia$time))  # Count how many duplicate timestamps exist
 
-# Shapiro test only accepts sample sizes between 3 and 5000
-st <- sample(georgia$time, 5000)
-shapiro.test(st)
+# convert time stamp to date
+dates <- as.POSIXct(georgia$time / 1000, origin = "1970-01-01", tz = "UTC")
+dates
 
-# Boxplot to detect outliers
-boxplot(georgia$time)
-
-# Outliers
-iqr_t <- out_ct[5] - out_ct[2]
-mild_lower <- out_ct[2] - 1.5 * iqr_t
-mild_upper <- out_ct[5] + 1.5 * iqr_t
-extreme_lower <- out_ct[2] - 3 * iqr_t
-extreme_upper <- out_ct[5] + 3 * iqr_t
-
-abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
-abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
-
-# Compute number of extreme outliers
-num_extreme <- length(which(georgia$time < extreme_lower | georgia$time > extreme_upper))
-
-num_extreme
 ```
 
 **Variable 13: price**
@@ -1259,6 +1270,7 @@ Univariate Descriptive Analysis
 In this initial phase, we analyze each variable in the dataset, emphasizing their key characteristics. Numeric variables that represent categorical or qualitative concepts are converted into factors, and new features may be created based on existing numerical variables to enhance model performance.
 
 Finally, a comprehensive data quality report is presented, assessing the overall integrity of the dataset and discussing potential implications for the modeling process.
+
 
 
 
