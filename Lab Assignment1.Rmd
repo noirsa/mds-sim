@@ -92,7 +92,7 @@ The function we need for EDA process
 # Use given Q1 & Q3 to compute indexes of outliers
 calculate_outliers <- function(x) {
   # Check for regular outliers
-  Boxplot(variable, main = "Boxplot")
+  Boxplot(x, main = "Boxplot")
   outliers <- boxplot.stats(x)$out
 
   # Compute quartiles and IQR
@@ -114,7 +114,8 @@ calculate_outliers <- function(x) {
   num_mild <- length(mild_idx)
   num_extreme <- length(extreme_idx)
 
-  
+  abline(h = c(lower_mild, upper_mild), col = "blue", lwd = 2)
+  abline(h = c(lower_extreme, upper_extreme), col = "red", lwd = 2)
 
   # Return the results as a list
   return(list(
@@ -125,6 +126,15 @@ calculate_outliers <- function(x) {
   ))
 }
 ```
+
+It is important to note that the explanatory data analysis is conducted exclusively on the training dataset. However, the creation and removal of variables derived from this process also affect the test dataset to ensure consistency across both sets.
+
+Univariate Descriptive Analysis
+
+In this initial phase, we analyze each variable in the dataset, emphasizing their key characteristics. Numeric variables that represent categorical or qualitative concepts are converted into factors, and new features may be created based on existing numerical variables to enhance model performance.
+
+Finally, a comprehensive data quality report is presented, assessing the overall integrity of the dataset and discussing potential implications for the modeling process.
+
 
 **Variable 1: X.1**
 
@@ -434,23 +444,13 @@ curve(dnorm(x, mean(georgia$price), sd(georgia$price)), add = T)
 sp <- sample(georgia$price, 5000)
 shapiro.test(sp)
 
-# Boxplot to detect outliers
-boxplot(georgia$price)
+#detect outlier
 
-# Outliers
-iqr_p <- out_cp[5] - out_cp[2]
-mild_lower <- out_cp[2] - 1.5 * iqr_p
-mild_upper <- out_cp[5] + 1.5 * iqr_p
-extreme_lower <- out_cp[2] - 3 * iqr_p
-extreme_upper <- out_cp[5] + 3 * iqr_p
-
-abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
-abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
+out <- calculate_outliers(georgia$price)
 
 # Compute number of extreme outliers
-num_extreme <- length(which(georgia$price < extreme_lower | georgia$price > extreme_upper))
+out$num_extreme
 
-num_extreme
 ```
 
 **Variable 14: pricePerSquareFoot**
@@ -1263,15 +1263,74 @@ georgia_value_rem <- georgia_value_rem %>%
 
 \newpage
 
-It is important to note that the explanatory data analysis is conducted exclusively on the training dataset. However, the creation and removal of variables derived from this process also affect the test dataset to ensure consistency across both sets.
-
-Univariate Descriptive Analysis
-
-In this initial phase, we analyze each variable in the dataset, emphasizing their key characteristics. Numeric variables that represent categorical or qualitative concepts are converted into factors, and new features may be created based on existing numerical variables to enhance model performance.
-
-Finally, a comprehensive data quality report is presented, assessing the overall integrity of the dataset and discussing potential implications for the modeling process.
 
 
+## Data quality reports
 
+**Variables**
+
+Up to this points, all variables in the dataset have been explored. In terms of missingness, no missing data are found in the dataset. Although the proportions of categories in some of the variables are just too exaggerated, it might yield better results if we removed those columns. If we rank the numeric variables in terms of 
+number of outliers, the following list is obtained, starting with the most outliers: longitude (97 extreme outliers), latitude (82 extreme outliers), pricePerSquareFoot (56 extreme outliers), price (43 extreme outliers), bathrooms (35 extreme outliers), bedrooms (18 extreme outliers), yearBuilt (16 extreme outliers), livingArea (9 extreme outliers), zipcode (331 mild outliers) and garageSpaces (5 mild outliers).
+ 
+**Univariate Analisis**
+
+Now we will study the univariate outliers of the aforementioned variables.
+
+
+
+
+First the number of univariate outliers per 
+individual are counted and added in a new variable called ‘univ_outl_count’. Looking 
+at the 8 individuals with the most univariate outliers (4) it can be concluded that they 
+are all old, highly taxed, low mpg, high engine size and most with a low price and high 
+mileage. A correlation matrix confirms this as it shows a significant negative 
+correlation to the year (so the older the car, the more univ outliers) and a significant 
+positive correlation to both mileage and engine size. 
+
+Price
+```{r}
+georgia$univ_outl_count <- 0
+georgia$univ_outl_count[Boxplot(georgia$price, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$price, id = list(n=Inf))] +1
+```
+```{r}
+georgia$univ_outl_count[Boxplot(georgia$yearBuilt, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$yearBuilt, id = list(n=Inf))] +1
+```
+```{r}
+georgia$univ_outl_count[Boxplot(georgia$latitude, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$latitude, id = list(n=Inf))] +1
+
+```
+
+
+```{r}
+georgia$univ_outl_count[Boxplot(georgia$longitude, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$longitude, id = list(n=Inf))] +1
+
+```
+
+```{r}
+georgia$univ_outl_count[Boxplot(georgia$livingArea, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$livingArea, id = list(n=Inf))] +1
+
+```
+```{r}
+georgia$univ_outl_count[Boxplot(georgia$bathrooms, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$bathrooms, id = list(n=Inf))] +1
+
+```
+```{r}
+georgia$univ_outl_count[Boxplot(georgia$bedrooms, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$bedrooms, id = list(n=Inf))] +1
+
+```
+```{r}
+georgia$univ_outl_count[Boxplot(georgia$garageSpaces, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$garageSpaces, id = list(n=Inf))] +1
+```
+```{r}
+max(georgia$univ_outl_count)
+```
+```{r}
+georgia[which(georgia$univ_outl_count == 7),]
+georgia_interest = georgia[,c(13,17,20,21,25,27,28)]
+cor_outl = cor(georgia_interest)
+require(corrplot)
+par(mfrow=c(1,1))
+corrplot(cor_outl, method = 'number')
+```
 
 
