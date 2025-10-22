@@ -1298,7 +1298,6 @@ georgia_value_rem <- georgia_value_rem %>%
 ```
 
 
-<<<<<<< HEAD
 \newpage
 
 
@@ -1314,7 +1313,6 @@ number of outliers, the following list is obtained, starting with the most outli
 
 Now we will study the univariate outliers of the aforementioned variables.
 =======
->>>>>>> 85d147ad8e6f06efb2988c34659c33249952d9de
 
 
 
