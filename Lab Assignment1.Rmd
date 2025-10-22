@@ -87,7 +87,7 @@ georgia2021 <- georgia[georgia$datePostedString == 2021,]
 
 In this section, we perform a crucial step in any data science project, especially when preparing data for modeling. A comprehensive descriptive analysis is carried out for each variable, emphasizing their most relevant characteristics. We proceed with a column-by-column examination of the dataset, followed by the generation of a data quality report. Subsequently, we prepare the data for the modeling phase by handling missing values through imputation techniques, removing non-informative variables, and creating new derived features where appropriate.
 
-The function we need for EDA process
+The function we need for EDA processes
 ```{r}
 # Use given Q1 & Q3 to compute indexes of outliers
 calculate_outliers <- function(x) {
@@ -172,7 +172,6 @@ georgia$X[1:5]
 unique_counts<-length(unique(georgia$X))
 # Verify if all values are unique
 unique_counts == nrow(georgia)
-
 
 ```
 
@@ -667,7 +666,7 @@ num_extreme
 
 **Variable 21: latitude**
 
-The numerical variable latitude contains the latitude of each of the rental houses. There are no missing values and there are 5455 unique numerical values. The data is not normally distributed (confirmed by the Shapiro test) and ranges from 30.73 to 34.99. In addition, there are 9782 extreme outliers.
+The numerical variable latitude contains the latitude of each of the rental houses. There are no missing values and there are 5455 unique numerical values. The data is not normally distributed (confirmed by the Shapiro test) and ranges from 30.73 to 34.99. In addition, there are 82 extreme outliers.
 
 ```{r}
 # Summary of the column
@@ -1116,6 +1115,44 @@ georgia$county[1:5]
 length(unique(georgia$county))
 ```
 
+## Data quality reports
+
+**Variables**
+
+Up to this points, all variables in the dataset have been explored. In terms of missingness, no missing data are found in the dataset. Although the proportions of categories in some of the variables are just too exaggerated, it might yield better results if we removed those columns. If we rank the numeric variables in terms of 
+number of outliers, the following list is obtained, starting with the most outliers: longitude (97 extreme outliers), latitude (82 extreme outliers), pricePerSquareFoot (56 extreme outliers), price (43 extreme outliers), bathrooms (35 extreme outliers), bedrooms (18 extreme outliers), yearBuilt (16 extreme outliers), livingArea (9 extreme outliers), zipcode (331 mild outliers) and garageSpaces (5 mild outliers).
+ 
+**Univariate Analisis**
+
+Now we will study the univariate outliers of the aforementioned variables.
+
+
+
+
+First the number of univariate outliers per 
+individual are counted and added in a new variable called ‘univ_outl_count’. Looking 
+at the 8 individuals with the most univariate outliers (4) it can be concluded that they 
+are all old, highly taxed, low mpg, high engine size and most with a low price and high 
+mileage. A correlation matrix confirms this as it shows a significant negative 
+correlation to the year (so the older the car, the more univ outliers) and a significant 
+positive correlation to both mileage and engine size. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## Data Cleaning
 
 ```{r}
@@ -1261,6 +1298,7 @@ georgia_value_rem <- georgia_value_rem %>%
 ```
 
 
+<<<<<<< HEAD
 \newpage
 
 
@@ -1275,6 +1313,8 @@ number of outliers, the following list is obtained, starting with the most outli
 **Univariate Analisis**
 
 Now we will study the univariate outliers of the aforementioned variables.
+=======
+>>>>>>> 85d147ad8e6f06efb2988c34659c33249952d9de
 
 
 
