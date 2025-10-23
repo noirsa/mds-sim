@@ -76,12 +76,6 @@ georgia$datePostedString <- as.Date(georgia$datePostedString, format = "%Y-%m-%d
 georgia$datePostedString <- as.numeric(format(georgia$datePostedString, "%Y"))
 
 ```
-There are 47 records that were not posted in 2021.
-```{r}
-# Retain all data have datePostedString == 2021
-nrow(georgia) - sum(georgia$datePostedString == "2021")
-georgia2021 <- georgia[georgia$datePostedString == 2021,]
-```
 
 ## 1. Explanatory Data Analysis
 
@@ -1119,23 +1113,137 @@ length(unique(georgia$county))
 
 **Variables**
 
-Up to this points, all variables in the dataset have been explored. In terms of missingness, no missing data are found in the dataset. Although the proportions of categories in some of the variables are just too exaggerated, it might yield better results if we removed those columns. If we rank the numeric variables in terms of 
-number of outliers, the following list is obtained, starting with the most outliers: longitude (97 extreme outliers), latitude (82 extreme outliers), pricePerSquareFoot (56 extreme outliers), price (43 extreme outliers), bathrooms (35 extreme outliers), bedrooms (18 extreme outliers), yearBuilt (16 extreme outliers), livingArea (9 extreme outliers), zipcode (331 mild outliers) and garageSpaces (5 mild outliers).
+Up to this points, all variables in the dataset have been explored. In terms of missingness, no missing data are found in the dataset. Although the proportions of categories in some of the variables are just too exaggerated, it might yield better results if we removed those columns. If we rank the numeric variables in terms of number of outliers, the following list is obtained, starting with the most outliers: longitude (97 extreme outliers), latitude (82 extreme outliers), pricePerSquareFoot (56 extreme outliers), price (43 extreme outliers), bathrooms (35 extreme outliers), bedrooms (18 extreme outliers), yearBuilt (16 extreme outliers), livingArea (9 extreme outliers, we are ignoring livingAreaValue and buildingArea, since they have the same values), zipcode (331 mild outliers) and garageSpaces (5 mild outliers).
  
 **Univariate Analisis**
 
-Now we will study the univariate outliers of the aforementioned variables.
+Now we will study the univariate outliers of the aforementioned variables. Firstly, the number of univariate outliers per individual are counted and added in a new variable called ‘univ_outl_count’. Looking at the 3 individuals with the most univariate outliers (6) it can be concluded that they are all old, one of them is not that old though, but the other two have more than 100 yers of history. All these houses are costly and have unusually high number of bathrooms and bedrooms. There is a house which has garage but it has no spaces in it and there is another house which has no stories (levels = 0). A correlation matrix confirms this as it shows a positive correlation (0.32) to the price (so the more expensive the house, the more univ outliers), it also shows a positive correlation to zipcode (0.46), livingArea (0.37), number of bathrooms (0.27) and number of bedrooms (0.21). These variables are also highly correlated with price.
+
+```{r}
+# longitude
+georgia$univ_outl_count <- 0
+georgia$univ_outl_count[Boxplot(georgia$longitude, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$longitude, id = list(n=Inf))] +1
+```
+
+```{r}
+# latitude
+georgia$univ_outl_count[Boxplot(georgia$latitude, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$latitude, id = list(n=Inf))] +1
+```
+
+```{r}
+# pricePerSquareFoot
+georgia$univ_outl_count[Boxplot(georgia$pricePerSquareFoot, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$pricePerSquareFoot, id = list(n=Inf))] +1
+```
+
+```{r}
+# price
+georgia$univ_outl_count[Boxplot(georgia$price, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$price, id = list(n=Inf))] +1
+```
+
+```{r}
+# bathrooms
+georgia$univ_outl_count[Boxplot(georgia$bathrooms, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$bathrooms, id = list(n=Inf))] +1
+```
+
+```{r}
+# bedrooms
+georgia$univ_outl_count[Boxplot(georgia$bedrooms, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$bedrooms, id = list(n=Inf))] +1
+```
+
+```{r}
+# yearBuilt
+georgia$univ_outl_count[Boxplot(georgia$yearBuilt, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$yearBuilt, id = list(n=Inf))] +1
+```
+
+```{r}
+# livingArea
+georgia$univ_outl_count[Boxplot(georgia$livingArea, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$livingArea, id = list(n=Inf))] +1
+```
+
+```{r}
+# zipcode
+georgia$univ_outl_count[Boxplot(georgia$zipcode, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$zipcode, id = list(n=Inf))] +1
+```
+
+```{r}
+# garageSpaces
+georgia$univ_outl_count[Boxplot(georgia$garageSpaces, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$garageSpaces, id = list(n=Inf))] +1
+```
+
+```{r}
+# There are observations with 6 outliers in those columns
+max(georgia$univ_outl_count)
+# Print those individuals
+georgia[which(georgia$univ_outl_count == 6),]
+```
+
+```{r}
+# We are going to a create a correlation matrix of those columns
+georgia_interest = georgia[,c(13,14,17,19,20,21,25,27,28,31,40)]
+cor_outl = cor(georgia_interest)
+par(mfrow=c(1,1))
+corrplot(cor_outl, method = 'number', number.cex = 0.5)
+```
+
+**Multivariate Analisis**
+
+Moutlier is applied on the numerical variables to find multivariate outliers. With the garageSpaces variable included, however, the method returns a singular matrix. Therefore this variable is excluded from the calculation. A very mild threshold of 0.025% is chosen as signficance level because is already returns a significant amount of outliers. This makes up around 5% of the total amount of instances. It is chosen to delete these outliers from the data set for the rest of the project. 
+
+```{r}
+# Use Moutlier that applies Mahalanobis distances to detect multivariate outliers
+res.out = Moutlier(georgia[,c(13,14,17,19,20,21,25,27,28)], quantile = 0.975, col="green") # Condidence level of 97.5%
+```
+
+```{r}
+length(which((res.out$md > res.out$cutoff)&(res.out$rd > res.out$cutoff))
+ )/nrow(georgia)
+```
+
+```{r}
+# Plot all observations
+par(mfrow=c(1,1))
+plot(res.out$md, res.out$rd, xlab = "Mahalanobis Distance", ylab = "Robust Distance") 
+abline(h=res.out$cutoff, col="red") 
+abline(v=res.out$cutoff, col="red") 
+
+# Limit the y and x axis
+plot(res.out$md, res.out$rd,
+     xlab = "Mahalanobis Distance",
+     ylab = "Robust Distance",
+     xlim = c(0, 20), # set x-axis limit
+     ylim = c(0, 70)) # set y-axis limit
+abline(h = res.out$cutoff, col = "red", lwd = 2)
+abline(v = res.out$cutoff, col = "red", lwd = 2)
+
+```
+
+```{r}
+# Summary of only outliers
+summary(georgia[which((res.out$md > res.out$cutoff)&(res.out$rd > res.out$cutoff)),])
+```
+
+```{r}
+# Summary of the original dataset
+summary(georgia)
+```
+
+**Profiling**
 
 
 
 
-First the number of univariate outliers per 
-individual are counted and added in a new variable called ‘univ_outl_count’. Looking 
-at the 8 individuals with the most univariate outliers (4) it can be concluded that they 
-are all old, highly taxed, low mpg, high engine size and most with a low price and high 
-mileage. A correlation matrix confirms this as it shows a significant negative 
-correlation to the year (so the older the car, the more univ outliers) and a significant 
-positive correlation to both mileage and engine size. 
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1300,75 +1408,12 @@ georgia_value_rem <- georgia_value_rem %>%
 
 \newpage
 
-
-
-## Data quality reports
-
-**Variables**
-
-Up to this points, all variables in the dataset have been explored. In terms of missingness, no missing data are found in the dataset. Although the proportions of categories in some of the variables are just too exaggerated, it might yield better results if we removed those columns. If we rank the numeric variables in terms of 
-number of outliers, the following list is obtained, starting with the most outliers: longitude (97 extreme outliers), latitude (82 extreme outliers), pricePerSquareFoot (56 extreme outliers), price (43 extreme outliers), bathrooms (35 extreme outliers), bedrooms (18 extreme outliers), yearBuilt (16 extreme outliers), livingArea (9 extreme outliers), zipcode (331 mild outliers) and garageSpaces (5 mild outliers).
- 
-**Univariate Analisis**
-
-Now we will study the univariate outliers of the aforementioned variables.
-=======
-
-
-
-
-First the number of univariate outliers per 
-individual are counted and added in a new variable called ‘univ_outl_count’. Looking 
-at the 8 individuals with the most univariate outliers (4) it can be concluded that they 
-are all old, highly taxed, low mpg, high engine size and most with a low price and high 
-mileage. A correlation matrix confirms this as it shows a significant negative 
-correlation to the year (so the older the car, the more univ outliers) and a significant 
-positive correlation to both mileage and engine size. 
-
-Price
 ```{r}
-georgia$univ_outl_count <- 0
-georgia$univ_outl_count[Boxplot(georgia$price, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$price, id = list(n=Inf))] +1
-```
-```{r}
-georgia$univ_outl_count[Boxplot(georgia$yearBuilt, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$yearBuilt, id = list(n=Inf))] +1
-```
-```{r}
-georgia$univ_outl_count[Boxplot(georgia$latitude, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$latitude, id = list(n=Inf))] +1
-
+# Retain all data have datePostedString == 2021
+nrow(georgia) - sum(georgia$datePostedString == "2021")
+georgia2021 <- georgia[georgia$datePostedString == 2021,]
 ```
 
 
-```{r}
-georgia$univ_outl_count[Boxplot(georgia$longitude, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$longitude, id = list(n=Inf))] +1
-
-```
-
-```{r}
-georgia$univ_outl_count[Boxplot(georgia$livingArea, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$livingArea, id = list(n=Inf))] +1
-
-```
-```{r}
-georgia$univ_outl_count[Boxplot(georgia$bathrooms, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$bathrooms, id = list(n=Inf))] +1
-
-```
-```{r}
-georgia$univ_outl_count[Boxplot(georgia$bedrooms, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$bedrooms, id = list(n=Inf))] +1
-
-```
-```{r}
-georgia$univ_outl_count[Boxplot(georgia$garageSpaces, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$garageSpaces, id = list(n=Inf))] +1
-```
-```{r}
-max(georgia$univ_outl_count)
-```
-```{r}
-georgia[which(georgia$univ_outl_count == 7),]
-georgia_interest = georgia[,c(13,17,20,21,25,27,28)]
-cor_outl = cor(georgia_interest)
-require(corrplot)
-par(mfrow=c(1,1))
-corrplot(cor_outl, method = 'number')
-```
 
 
