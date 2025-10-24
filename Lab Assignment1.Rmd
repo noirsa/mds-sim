@@ -12,6 +12,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE) # Clear the plots
 rm(list=ls()) # Clear the environment
+set.seed(123) # Set a seed to reproduce outcomes
 ```
 
 We start by loading essential libraries, importing the data, and defining functions to simplify repetitive operations.
@@ -71,22 +72,22 @@ summary(georgia)
 ```
 
 ```{r}
-# Converting the date column to numeric
+# Extract years from the column datePostedString
 georgia$datePostedString <- as.Date(georgia$datePostedString, format = "%Y-%m-%d")
 georgia$datePostedString <- as.numeric(format(georgia$datePostedString, "%Y"))
-
 ```
 
 ## 1. Explanatory Data Analysis
 
 In this section, we perform a crucial step in any data science project, especially when preparing data for modeling. A comprehensive descriptive analysis is carried out for each variable, emphasizing their most relevant characteristics. We proceed with a column-by-column examination of the dataset, followed by the generation of a data quality report. Subsequently, we prepare the data for the modeling phase by handling missing values through imputation techniques, removing non-informative variables, and creating new derived features where appropriate.
 
-The function we need for EDA processes
 ```{r}
+# The function we need for EDA processes
 # Use given Q1 & Q3 to compute indexes of outliers
 calculate_outliers <- function(x) {
   # Check for regular outliers
-  Boxplot(x, main = "Boxplot")
+  col_name <- deparse(substitute(x))
+  Boxplot(x, main = "Boxplot", ylab = col_name)
   outliers <- boxplot.stats(x)$out
 
   # Compute quartiles and IQR
@@ -121,22 +122,11 @@ calculate_outliers <- function(x) {
 }
 ```
 
-It is important to note that the explanatory data analysis is conducted exclusively on the training dataset. However, the creation and removal of variables derived from this process also affect the test dataset to ensure consistency across both sets.
-
-Univariate Descriptive Analysis
-
-In this initial phase, we analyze each variable in the dataset, emphasizing their key characteristics. Numeric variables that represent categorical or qualitative concepts are converted into factors, and new features may be created based on existing numerical variables to enhance model performance.
-
-Finally, a comprehensive data quality report is presented, assessing the overall integrity of the dataset and discussing potential implications for the modeling process.
-
-
 **Variable 1: X.1**
 
 Variable X.1 is a numerical variable with no missing values.
 A quick inspection reveals that it serves as a unique identifier for each observation, since the number of unique values equals the total number of rows.
-Therefore, this variable does not contain meaningful numerical information for statistical analysis.
-Normality and outlier tests were not performed, as the variable is an ID rather than a continuous numeric feature.
-It contains no missing values thus imputation is not needed. This variable does not contain any outliers. Interestingly, the maximum value (6468) in the data does not match the number of columns (6168), maybe these ids belong to the observations of the original dataset where rental houses from other states are also stored.
+Therefore, this variable does not contain meaningful numerical information for statistical analysis. Normality and outlier tests were not performed, as the variable is an ID rather than a continuous numeric feature. It contains no missing values thus imputation is not needed. This variable does not contain any outliers. Interestingly, the maximum value (6468) in the data does not match the number of columns (6168), maybe these ids belong to the observations of the original dataset where rental houses from other states are also stored.
 
 ```{r}
 # Summary of the column
@@ -172,9 +162,7 @@ unique_counts == nrow(georgia)
 **Variable 3: id**
 
 This categorical variable is suppose to contain the unique identifier of each row.
-This variable does not have missing values. However, the number of unique values (5515 levels) do not match with the number of rows (6168 rows), so we can't really use it as an identifier in that regard.
-Nonetheless, there is another possibility that the dataset contains duplicated rows. And it happens that our idea's hit the bull's eye, it is true that the rows with the same ids are duplicated, most of their variables are the same with exception of the columns X.1, X and countyId.
-However, we also find out that not all rows with the same id are equal in terms of other variables, there are some which are likely to have errors in variables like garageSpaces, hasGarage and so on. But only 25 ids out of 653 duplicated ids show that pattern.
+This variable does not have missing values. However, the number of unique values (5515 levels) do not match with the number of rows (6168 rows), so we can't really use it as an identifier in that regard. Nonetheless, there is another possibility that the dataset contains duplicated rows. And it happens that our idea has hit the bull's eye, it is true that the rows with the same ids are duplicated, most of their variables are the same with exception of the columns X.1, X and countyId. However, we also find out that not all rows with the same id are equal in terms of other variables, there are some which are likely to have errors in variables like garageSpaces, hasGarage and so on. But only 25 ids out of 653 duplicated ids show that pattern. Moreover, in the examples we present below, all sensible observations seem to be the last one, so in the later data cleaning section, we will keep only those observations.
 
 ```{r}
 # Summary of the column
@@ -223,9 +211,6 @@ georgia[which(georgia$id == singular_ids[2]),]
 
 # Number of singular ids
 length(singular_ids)
-
-
-
 ```
 
 **Variable 4: stateId**
@@ -270,12 +255,13 @@ sci <- sample(georgia$countyId, 5000)
 shapiro.test(sci)
 
 # Boxplot to detect outliers
-Boxplot(georgia$countyId)
+calculate_outliers(georgia$countyId)
 ```
 
 **Variable 6: cityId**
 
 This numerical variable represents the unique identifiers for cities in the state of Georgia. The cityId values range from 0 to 397,383, with 374 unique values. Notably, there are 340 occurrences of the value 0, which might indicate missing data.
+
 ```{r}
 # Summary of the column
 out_ci <- summary(georgia$cityId)
@@ -394,6 +380,7 @@ plot(factor(georgia$event))
 **Variable 12: time**
 
 The time variable is a numerical variable representing the timestamp when each observation was collected. This variable has no missing values and contains 216 unique timestamps. The data was collected after 2021.
+
 ```{r}
 # Summary of the column
 out_ct <- summary(georgia$time)
@@ -437,11 +424,10 @@ curve(dnorm(x, mean(georgia$price), sd(georgia$price)), add = T)
 sp <- sample(georgia$price, 5000)
 shapiro.test(sp)
 
-#detect outlier
-
+# Detect outlier
 out <- calculate_outliers(georgia$price)
 
-# Compute number of extreme outliers
+# Print number of extreme outliers
 out$num_extreme
 
 ```
@@ -468,23 +454,11 @@ curve(dnorm(x, mean(georgia$pricePerSquareFoot), sd(georgia$pricePerSquareFoot))
 sppsf <- sample(georgia$pricePerSquareFoot, 5000)
 shapiro.test(sppsf)
 
-# Boxplot to detect outliers
-boxplot(georgia$pricePerSquareFoot)
+# Detect outlier
+out <- calculate_outliers(georgia$pricePerSquareFoot)
 
-# Outliers
-iqr_ppsf <- out_cppsf[5] - out_cppsf[2]
-mild_lower <- out_cppsf[2] - 1.5 * iqr_ppsf
-mild_upper <- out_cppsf[5] + 1.5 * iqr_ppsf
-extreme_lower <- out_cppsf[2] - 3 * iqr_ppsf
-extreme_upper <- out_cppsf[5] + 3 * iqr_ppsf
-
-abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
-abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
-
-# Compute number of extreme outliers
-num_extreme <- length(which(georgia$pricePerSquareFoot < extreme_lower | georgia$pricePerSquareFoot > extreme_upper))
-
-num_extreme
+# Print number of extreme outliers
+out$num_extreme
 ```
 
 **Variable 15: city**
@@ -522,7 +496,7 @@ length(unique(georgia$state))
 
 **Variable 17: yearBuilt**
 
-The variable yearBuilt is a numerical variable indicating the year when the house was built. This variable has no missing values and there are 159 unique values. It's proved by the Shapiro test that it is not normally distributed and there are 16 extreme outliers. Those outliers are irreal, the maximum value of the data is 9999.
+The variable yearBuilt is a numerical variable indicating the year when the house was built. There are 159 unique values. It's proved by the Shapiro test that it is not normally distributed and there are 16 extreme outliers. Those outliers are irreal, the maximum value of the data is 9999 which might indicate the presence of missing data in the dataset.
 
 ```{r}
 # Summary of the column
@@ -542,23 +516,11 @@ curve(dnorm(x, mean(georgia$yearBuilt), sd(georgia$yearBuilt)), add = T)
 syb <- sample(georgia$yearBuilt, 5000)
 shapiro.test(syb)
 
-# Boxplot to detect outliers
-boxplot(georgia$yearBuilt)
+# Detect outlier
+out <- calculate_outliers(georgia$yearBuilt)
 
-# Outliers
-iqr_yb <- out_cyb[5] - out_cyb[2]
-mild_lower <- out_cyb[2] - 1.5 * iqr_yb
-mild_upper <- out_cyb[5] + 1.5 * iqr_yb
-extreme_lower <- out_cyb[2] - 3 * iqr_yb
-extreme_upper <- out_cyb[5] + 3 * iqr_yb
-
-abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
-abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
-
-# Compute number of extreme outliers
-num_extreme <- length(which(georgia$yearBuilt < extreme_lower | georgia$yearBuilt > extreme_upper))
-
-num_extreme
+# Print number of extreme outliers
+out$num_extreme
 ```
 
 **Variable 18: streetAddress**
@@ -598,23 +560,11 @@ curve(dnorm(x, mean(georgia$zipcode), sd(georgia$zipcode)), add = T)
 szc <- sample(georgia$zipcode, 5000)
 shapiro.test(szc)
 
-# Boxplot to detect outliers
-boxplot(georgia$zipcode)
+# Detect outlier
+out <- calculate_outliers(georgia$zipcode)
 
-# Outliers
-iqr_yzc <- out_czc[5] - out_czc[2]
-mild_lower <- out_czc[2] - 1.5 * iqr_yzc
-mild_upper <- out_czc[5] + 1.5 * iqr_yzc
-extreme_lower <- out_czc[2] - 3 * iqr_yzc
-extreme_upper <- out_czc[5] + 3 * iqr_yzc
-
-abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
-abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
-
-# Compute number of mild outliers
-num_mild <- length(which(georgia$zipcode < mild_lower | georgia$zipcode > mild_upper))
-
-num_mild
+# Print number of extreme outliers
+out$num_mild
 ```
 
 **Variable 20: longitude**
@@ -639,23 +589,11 @@ curve(dnorm(x, mean(georgia$longitude), sd(georgia$longitude)), add = T)
 slg <- sample(georgia$longitude, 5000)
 shapiro.test(slg)
 
-# Boxplot to detect outliers
-boxplot(georgia$longitude)
+# Detect outlier
+out <- calculate_outliers(georgia$longitude)
 
-# Outliers
-iqr_ylg <- out_clg[5] - out_clg[2]
-mild_lower <- out_clg[2] - 1.5 * iqr_ylg
-mild_upper <- out_clg[5] + 1.5 * iqr_ylg
-extreme_lower <- out_clg[2] - 3 * iqr_ylg
-extreme_upper <- out_clg[5] + 3 * iqr_ylg
-
-abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
-abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
-
-# Compute number of extreme outliers
-num_extreme <- length(which(georgia$longitude < extreme_lower | georgia$longitude > extreme_upper))
-
-num_extreme
+# Print number of extreme outliers
+out$num_extreme
 ```
 
 **Variable 21: latitude**
@@ -680,23 +618,11 @@ curve(dnorm(x, mean(georgia$latitude), sd(georgia$latitude)), add = T)
 slt <- sample(georgia$latitude, 5000)
 shapiro.test(slt)
 
-# Boxplot to detect outliers
-boxplot(georgia$latitude)
+# Detect outlier
+out <- calculate_outliers(georgia$latitude)
 
-# Outliers
-iqr_ylt <- out_clt[5] - out_clt[2]
-mild_lower <- out_clt[2] - 1.5 * iqr_ylt
-mild_upper <- out_clt[5] + 1.5 * iqr_ylt
-extreme_lower <- out_clt[2] - 3 * iqr_ylt
-extreme_upper <- out_clt[5] + 3 * iqr_ylt
-
-abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
-abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
-
-# Compute number of extreme outliers
-num_extreme <- length(which(georgia$latitude < extreme_lower | georgia$latitude > extreme_upper))
-
-num_extreme
+# Print number of extreme outliers
+out$num_extreme
 ```
 
 **Variable 22: hasBadGeocode**
@@ -763,12 +689,14 @@ length(unique(georgia$currency))
 
 **Variable 25: livingArea**
 
-This numerical variable contains the living are of the rental houses in sqft. There are no missing values and it's not normally distributed. There are in total 2601 unique values in the data. In addition, 9 extreme outliers are found, each of them are above 7000 sqft.
+This numerical variable contains the living are of the rental houses in sqft. There are no missing values and it's not normally distributed. Although we said that it has no missing values, there is an observation where the livingArea is 1 (minimum value), this could be an error or missing value. There are in total 2601 unique values in the data. In addition, 9 extreme outliers are found, each of them are above 7000 sqft.
 
 ```{r}
 # Summary of the column
 out_cla <- summary(georgia$livingArea)
 out_cla
+# Observation with livingArea = 1
+which(georgia$livingArea < 100) # 1282
 # Any missing values
 sum(is.na(georgia$livingArea))
 # First five elements
@@ -783,23 +711,11 @@ curve(dnorm(x, mean(georgia$livingArea), sd(georgia$livingArea)), add = T)
 sla <- sample(georgia$livingArea, 5000)
 shapiro.test(sla)
 
-# Boxplot to detect outliers
-boxplot(georgia$livingArea)
+# Detect outlier
+out <- calculate_outliers(georgia$livingArea)
 
-# Outliers
-iqr_yla <- out_cla[5] - out_cla[2]
-mild_lower <- out_cla[2] - 1.5 * iqr_yla
-mild_upper <- out_cla[5] + 1.5 * iqr_yla
-extreme_lower <- out_cla[2] - 3 * iqr_yla
-extreme_upper <- out_cla[5] + 3 * iqr_yla
-
-abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
-abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
-
-# Compute number of extreme outliers
-num_extreme <- length(which(georgia$livingArea < extreme_lower | georgia$livingArea > extreme_upper))
-
-num_extreme
+# Print number of extreme outliers
+out$num_extreme
 ```
 
 **Variable 26: livingAreaValue**
@@ -812,7 +728,7 @@ all(georgia$livingArea == georgia$livingAreaValue)
 ```
 **Variable 27: bathrooms**
 
-This numerical variable indicates the number of bathrooms each one of the rental houses has. There are no missing values and it's not normally distributed. Thre are 11 unique values and 35 extreme outliers (> 6 bathrooms).
+This numerical variable indicates the number of bathrooms each one of the rental houses has. There are no missing values (NAs) and it's not normally distributed. Thre are 11 unique values and 35 extreme outliers (> 6 bathrooms). Some of the observations have 0 bathrooms, these must be an error, so we will deal with them later with imputation.
 
 ```{r}
 # Summary of the column
@@ -832,28 +748,16 @@ curve(dnorm(x, mean(georgia$bathrooms), sd(georgia$bathrooms)), add = T)
 sb <- sample(georgia$bathrooms, 5000)
 shapiro.test(sb)
 
-# Boxplot to detect outliers
-boxplot(georgia$bathrooms)
+# Detect outlier
+out <- calculate_outliers(georgia$bathrooms)
 
-# Outliers
-iqr_yb <- out_cb[5] - out_cb[2]
-mild_lower <- out_cb[2] - 1.5 * iqr_yb
-mild_upper <- out_cb[5] + 1.5 * iqr_yb
-extreme_lower <- out_cb[2] - 3 * iqr_yb
-extreme_upper <- out_cb[5] + 3 * iqr_yb
-
-abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
-abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
-
-# Compute number of extreme outliers
-num_extreme <- length(which(georgia$bathrooms < extreme_lower | georgia$bathrooms > extreme_upper))
-
-num_extreme
+# Print number of extreme outliers
+out$num_extreme
 ```
 
 **Variable 28: bedrooms**
 
-This numerical variable indicates the number of bedrooms each one of the rental houses has. There are no missing values and it's not normally distributed. Thre are 12 unique values and 18 extreme outliers (> 7 bedrooms).
+This numerical variable indicates the number of bedrooms each one of the rental houses has. There are no missing values (NAs) and it's not normally distributed. There are 12 unique values and 18 extreme outliers (> 7 bedrooms). Similar to the previous variable, some of the observations have 0 bedrooms, so we will also deal with them later with imputation.
 
 ```{r}
 # Summary of the column
@@ -873,23 +777,11 @@ curve(dnorm(x, mean(georgia$bedrooms), sd(georgia$bedrooms)), add = T)
 sbd <- sample(georgia$bedrooms, 5000)
 shapiro.test(sbd)
 
-# Boxplot to detect outliers
-boxplot(georgia$bedrooms)
+# Detect outlier
+out <- calculate_outliers(georgia$bedrooms)
 
-# Outliers
-iqr_ybd <- out_cbd[5] - out_cbd[2]
-mild_lower <- out_cbd[2] - 1.5 * iqr_ybd
-mild_upper <- out_cbd[5] + 1.5 * iqr_ybd
-extreme_lower <- out_cbd[2] - 3 * iqr_ybd
-extreme_upper <- out_cbd[5] + 3 * iqr_ybd
-
-abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
-abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
-
-# Compute number of extreme outliers
-num_extreme <- length(which(georgia$bedrooms < extreme_lower | georgia$bedrooms > extreme_upper))
-
-num_extreme
+# Print number of extreme outliers
+out$num_extreme
 ```
 
 **Variable 29: buildingArea**
@@ -940,23 +832,11 @@ curve(dnorm(x, mean(georgia$garageSpaces), sd(georgia$garageSpaces)), add = T)
 sgs <- sample(georgia$garageSpaces, 5000)
 shapiro.test(sgs)
 
-# Boxplot to detect outliers
-boxplot(georgia$garageSpaces)
+# Detect outlier
+out <- calculate_outliers(georgia$garageSpaces)
 
-# Outliers
-iqr_ygs <- out_cgs[5] - out_cgs[2]
-mild_lower <- out_cgs[2] - 1.5 * iqr_ygs
-mild_upper <- out_cgs[5] + 1.5 * iqr_ygs
-extreme_lower <- out_cgs[2] - 3 * iqr_ygs
-extreme_upper <- out_cgs[5] + 3 * iqr_ygs
-
-abline(h = c(mild_lower, mild_upper), col = "blue", lwd = 2)
-abline(h = c(extreme_lower, extreme_upper), col = "red", lwd = 2)
-
-# Compute number of mild outliers
-num_mild <- length(which(georgia$garageSpaces < mild_lower | georgia$garageSpaces > mild_upper))
-
-num_mild
+# Print number of extreme outliers
+out$num_mild
 ```
 
 **Variable 32: hasGarage**
@@ -981,7 +861,7 @@ which(georgia$garageSpaces > 0 & georgia$hasGarage == 0)
 
 **Variable 33: levels**
 
-The variable levels is a categorical variable that indicates the levels of the buildings. This variable has no missing values and it has 35 unique values. However, this variable is a bit messy, there are a lot of repeated labels, they may be written differently, but in fact, they have the same meaning. For instance, the label "3 Story" matches with "Tri-level".
+The variable levels is a categorical variable that indicates the levels of the buildings. This variable has no missing values and it has 35 unique values, although the level "0" might indicate missing values in this variable. However, this variable is a bit messy, there are a lot of repeated labels, they may be written differently, but in fact, they have the same meaning. For instance, the label "3 Story" matches with "Tri-level".
 
 ```{r}
 # Summary of the column
@@ -1108,95 +988,291 @@ georgia$county[1:5]
 # Number of unique values
 length(unique(georgia$county))
 ```
+## 2. Data preparation
 
-## Data quality reports
+In this section we will prepare the data in order to facilitate the later analysis. In the previous section we found different problems of each variable, so here we are going to either apply different cleaning functions to the columns or just remove them.
+
+```{r}
+# There are duplicated rows/obs in the dataset, we can use the column id to remove them
+duplicated_rows <- duplicated(georgia$id, fromLast = TRUE) # Find duplicated rows from the bottom
+georgia_clean <- georgia[!duplicated_rows, ] # Remove duplicated observations
+```
+
+```{r}
+# We only want to keep observations from 2021
+georgia_clean <- georgia_clean[georgia_clean$datePostedString == 2021,]
+```
+
+```{r}
+# The column levels is messy and not consistent, since it has both numeric and categorical labels
+
+# We are going to perform an explicit mapping for the 35 observed raw values into 14 categories + NA, which will be imputed after analyzing the data quality
+mapping <- c(
+  "One and One Half"                          = "1.5",
+  "One"                                       = "1",
+  "Two"                                       = "2",
+  "Three Or More"                             = "3+",
+  "Multi/Split"                               = "multi-split",
+  "Multi/Split-Split Level"                   = "multi-split",
+  "0"                                         = NA, # This value will be imputed
+  "One-Two Story Foyer"                       = "multi-foyer",
+  "Tri Level"                                 = "tri-level",
+  "2.5 Story"                                 = "2.5",
+  "Manufactured Home 1 Story"                 = "manufactured",
+  "Two-Split Foyer"                           = "split-foyer",
+  "One and One Half-Split Level"              = "multi-split",
+  "Split Foyer"                               = "split-foyer",
+  "One and One Half-Two"                      = "multi",
+  "Two-Two Story Foyer"                       = "multi",
+  "One and One Half-Multi/Split"              = "multi-split",
+  "Three Or More-Two Story Foyer"             = "3+",
+  "One-Two"                                   = "multi",
+  "One-One and One Half"                      = "multi",
+  "One-Manufactured Home 1 Story"             = "manufactured",
+  "Multi/Split-Two"                           = "multi-split",
+  "Two-Multi/Split"                           = "multi-split",
+  "One-Other"                                 = "other",
+  "Two-Three Or More"                         = "multi",
+  "One-One and One Half-Two"                  = "multi",
+  "Three Or More-Split Level-Tri-Level"       = "3+",
+  "Two-Foyer - 2 Story"                       = "2",
+  "Other-See Remarks"                         = "other-remarks",
+  "Split Level"                               = "split",
+  "3 Story"                                   = "3+",
+  "Two-Split Level"                           = "split",
+  "One-Mobile Home 1 Story"                   = "manufactured",
+  "Tri Level-Split Level"                     = "tri-level",
+  "Tri-Level"                                 = "tri-level"
+)
+
+# Apply mapping
+georgia_clean$levels_mapped <- mapping[georgia_clean$levels]
+
+```
+
+```{r}
+# Regarding the columns city/cityId and county/countyId, we noticed that they do not have the same number of unique variables. By the way, the column cityId has some missing values where the cityId equals 0.
+length(unique(georgia$cityId)) == length(unique(georgia$city))
+
+# It's because of that, in the following cell we will remove the columns cityId and countyId and retain city and county
+
+```
+
+```{r}
+# The following columns just don't provide any useful information
+
+# Columns to remove (we chose livingArea instead of pricePerSquareFoot)
+cols_to_remove <- c(
+  "X.1", "X", "id", "stateId", "country", "time", "cityId", "datePostedString",
+  "state", "streetAddress", "hasBadGeocode", "description", 
+  "currency", "livingAreaValue", "buildingArea", "hasPetsAllowed", 
+  "is_bankOwned", "is_forAuction", "countyId", "pricePerSquareFoot", "levels"
+)
+
+# Remove them from the dataset
+georgia_clean <- georgia_clean[, setdiff(names(georgia_clean), cols_to_remove)]
+
+# Check remaining columns
+names(georgia_clean)
+```
+
+```{r}
+# Rental houses built in the future are not possible
+georgia_clean[georgia_clean$yearBuilt > 2025,"yearBuilt"] <- NA
+# Rental houses with 0 bedrooms or bathrooms are not acceptable
+georgia_clean[georgia_clean$bedrooms == 0,"bedrooms"] <- NA
+georgia_clean[georgia_clean$bathrooms == 0,"bathrooms"] <- NA
+# In case hasGarage == 0 and garageSpaces > 0
+georgia_clean[georgia_clean$hasGarage == 0 & georgia_clean$garageSpaces > 0,"hasGarage"] <- NA
+georgia_clean[georgia_clean$hasGarage == 0 & georgia_clean$garageSpaces > 0,"garageSpaces"] <- NA
+# In livingArea there is an observation with livingArea = 1
+georgia_clean[georgia_clean$livingArea < 100,"livingArea"] <- NA
+
+# These are preliminary extreme outliers we found, later we will assign NAs to each of the outliers found in these numerical variables using Boxplot
+
+# As discussed in the exploratory data analysis, these missing values are likely the result of later updates to the rental houses. This could explain the presence of duplicated rows, or they might simply come from errors introduced during data collection or upload.
+```
+
+```{r}
+# Removing trailing blanks and converting every category to lower case
+georgia_clean <- georgia_clean %>%
+  mutate(across(where(~ is.character(.) | is.factor(.)),
+                ~ tolower(trimws(as.character(.)))))
+# Doing this can reduce the number of unique values in categorical variables. For example, in the variable city we had originally 383 factors, but in the filtered dataset we have now 371 factors.
+length(unique(georgia$city)) # Original dataset
+length(unique(georgia_clean$city)) # Filtered dataset
+
+```
+
+
+```{r}
+summary(georgia_clean)
+```
+
+As we can see from the summary statistics, the data generally makes sense and follows the expected rules for the housing field. Prices range from 6,250 USD to 1.3 million USD, which is plausible given the variability of the Georgia housing market. Structural variables like livingArea, bedrooms, and bathrooms mostly fall within reasonable ranges, though the maximums (10 bathrooms, 14 bedrooms) suggest a few outliers. yearBuilt spans 1800 to 2022, reflecting a mix of older and newer houses. Geographic variables (latitude, longitude, zipcode) lie within Georgia’s bounds. Logical patterns are generally consistent, for example, homes marked with hasGarage = 1 usually have a positive number of garageSpaces, and only a small fraction of properties are labeled as new constructions. Overall, the data supports the working theory that property characteristics such as size and age influence price, while occasional anomalies are likely due to minor data entry or collection errors rather than systemic issues in the dataset.
+
+## 3. Data quality reports
 
 **Variables**
 
-Up to this points, all variables in the dataset have been explored. In terms of missingness, no missing data are found in the dataset. Although the proportions of categories in some of the variables are just too exaggerated, it might yield better results if we removed those columns. If we rank the numeric variables in terms of number of outliers, the following list is obtained, starting with the most outliers: longitude (97 extreme outliers), latitude (82 extreme outliers), pricePerSquareFoot (56 extreme outliers), price (43 extreme outliers), bathrooms (35 extreme outliers), bedrooms (18 extreme outliers), yearBuilt (16 extreme outliers), livingArea (9 extreme outliers, we are ignoring livingAreaValue and buildingArea, since they have the same values), zipcode (331 mild outliers) and garageSpaces (5 mild outliers).
+Up to this points, all variables in the dataset have been explored. In terms of missingness, some of the variables have exaggerated values or error values, those could be considered as missing values. If we rank the numeric variables in terms of number of outliers, the following list is obtained, starting with the most outliers: longitude (97 extreme outliers), latitude (82 extreme outliers), pricePerSquareFoot (56 extreme outliers), price (43 extreme outliers), bathrooms (35 extreme outliers), bedrooms (18 extreme outliers), yearBuilt (16 extreme outliers), livingArea (9 extreme outliers, we are ignoring livingAreaValue and buildingArea, since they have the same values), zipcode (331 mild outliers) and garageSpaces (5 mild outliers).
  
 **Univariate Analisis**
 
-Now we will study the univariate outliers of the aforementioned variables. Firstly, the number of univariate outliers per individual are counted and added in a new variable called ‘univ_outl_count’. Looking at the 3 individuals with the most univariate outliers (6) it can be concluded that they are all old, one of them is not that old though, but the other two have more than 100 yers of history. All these houses are costly and have unusually high number of bathrooms and bedrooms. There is a house which has garage but it has no spaces in it and there is another house which has no stories (levels = 0). A correlation matrix confirms this as it shows a positive correlation (0.32) to the price (so the more expensive the house, the more univ outliers), it also shows a positive correlation to zipcode (0.46), livingArea (0.37), number of bathrooms (0.27) and number of bedrooms (0.21). These variables are also highly correlated with price.
+Now we will study the univariate outliers of the aforementioned variables. Firstly, the number of univariate outliers per individual are counted and added in a new variable called ‘univ_outl_count’. Looking at the individuals with the most univariate outliers (3) it can be concluded that they are all costly and have unusually high number of bathrooms and bedrooms.
+
+The correlation matrix shows a positive correlation between price, bathrooms, bedrooms, livingArea and garageSpaces. This makes sense, as larger houses typically command higher prices due to the increased living space and associated amenities. Interestingly, the number of outliers appears to be negatively correlated with latitude, suggesting that properties located at lower latitudes tend to have more outliers.
 
 ```{r}
 # longitude
-georgia$univ_outl_count <- 0
-georgia$univ_outl_count[Boxplot(georgia$longitude, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$longitude, id = list(n=Inf))] +1
+georgia_clean$univ_outl_count <- 0
+
+# Calculate outliers
+out <- calculate_outliers(georgia_clean$longitude)
+# Update the column univ_outl_count
+georgia_clean[out$extreme_indexes, "univ_outl_count"] = georgia_clean[out$extreme_indexes, "univ_outl_count"] + 1
+# Add NAs
+georgia_clean[out$extreme_indexes, "longitude"] <- NA
 ```
 
 ```{r}
 # latitude
-georgia$univ_outl_count[Boxplot(georgia$latitude, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$latitude, id = list(n=Inf))] +1
-```
 
-```{r}
-# pricePerSquareFoot
-georgia$univ_outl_count[Boxplot(georgia$pricePerSquareFoot, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$pricePerSquareFoot, id = list(n=Inf))] +1
+# Calculate outliers
+out <- calculate_outliers(georgia_clean$latitude)
+# Update the column univ_outl_count
+georgia_clean[out$extreme_indexes, "univ_outl_count"] = georgia_clean[out$extreme_indexes, "univ_outl_count"] + 1
+# Add NAs
+georgia_clean[out$extreme_indexes, "latitude"] <- NA
 ```
 
 ```{r}
 # price
-georgia$univ_outl_count[Boxplot(georgia$price, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$price, id = list(n=Inf))] +1
+
+# Calculate outliers
+out <- calculate_outliers(georgia_clean$price)
+# Update the column univ_outl_count
+georgia_clean[out$extreme_indexes, "univ_outl_count"] = georgia_clean[out$extreme_indexes, "univ_outl_count"] + 1
+# Add NAs
+georgia_clean[out$extreme_indexes, "price"] <- NA
 ```
 
 ```{r}
 # bathrooms
-georgia$univ_outl_count[Boxplot(georgia$bathrooms, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$bathrooms, id = list(n=Inf))] +1
+
+# Calculate outliers
+out <- calculate_outliers(georgia_clean$bathrooms)
+# Update the column univ_outl_count
+georgia_clean[out$extreme_indexes, "univ_outl_count"] = georgia_clean[out$extreme_indexes, "univ_outl_count"] + 1
+# Add NAs
+georgia_clean[out$extreme_indexes, "bathrooms"] <- NA
 ```
 
 ```{r}
 # bedrooms
-georgia$univ_outl_count[Boxplot(georgia$bedrooms, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$bedrooms, id = list(n=Inf))] +1
+
+# Calculate outliers
+out <- calculate_outliers(georgia_clean$bedrooms)
+# Update the column univ_outl_count
+georgia_clean[out$extreme_indexes, "univ_outl_count"] = georgia_clean[out$extreme_indexes, "univ_outl_count"] + 1
+# Add NAs
+georgia_clean[out$extreme_indexes, "bedrooms"] <- NA
 ```
 
 ```{r}
 # yearBuilt
-georgia$univ_outl_count[Boxplot(georgia$yearBuilt, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$yearBuilt, id = list(n=Inf))] +1
+
+# Calculate outliers
+out <- calculate_outliers(georgia_clean$yearBuilt)
+# Update the column univ_outl_count
+georgia_clean[out$extreme_indexes, "univ_outl_count"] = georgia_clean[out$extreme_indexes, "univ_outl_count"] + 1
+# Add NAs
+georgia_clean[out$extreme_indexes, "yearBuilt"] <- NA
 ```
 
 ```{r}
 # livingArea
-georgia$univ_outl_count[Boxplot(georgia$livingArea, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$livingArea, id = list(n=Inf))] +1
+
+# Calculate outliers
+out <- calculate_outliers(georgia_clean$livingArea)
+# Update the column univ_outl_count
+georgia_clean[out$extreme_indexes, "univ_outl_count"] = georgia_clean[out$extreme_indexes, "univ_outl_count"] + 1
+# Add NAs
+georgia_clean[out$extreme_indexes, "livingArea"] <- NA
 ```
 
 ```{r}
 # zipcode
-georgia$univ_outl_count[Boxplot(georgia$zipcode, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$zipcode, id = list(n=Inf))] +1
+
+# Calculate outliers
+out <- calculate_outliers(georgia_clean$zipcode)
+# Update the column univ_outl_count
+georgia_clean[out$mild_indexes, "univ_outl_count"] = georgia_clean[out$mild_indexes, "univ_outl_count"] + 1
+# Add NAs (here we use mild outliers, since we don't have extreme outliers)
+georgia_clean[out$mild_indexes, "zipcode"] <- NA
 ```
 
 ```{r}
 # garageSpaces
-georgia$univ_outl_count[Boxplot(georgia$garageSpaces, id = list(n=Inf))] = georgia$univ_outl_count[Boxplot(georgia$garageSpaces, id = list(n=Inf))] +1
+
+# Calculate outliers
+out <- calculate_outliers(georgia_clean$garageSpaces)
+# Update the column univ_outl_count
+georgia_clean[out$mild_indexes, "univ_outl_count"] = georgia_clean[out$mild_indexes, "univ_outl_count"] + 1
+# Add NAs (here we use mild outliers, since we don't have extreme outliers)
+georgia_clean[out$mild_indexes, "garageSpaces"] <- NA
 ```
 
 ```{r}
-# There are observations with 6 outliers in those columns
-max(georgia$univ_outl_count)
+# There are observations with 3 outliers in those columns
+max(georgia_clean$univ_outl_count)
 # Print those individuals
-georgia[which(georgia$univ_outl_count == 6),]
+georgia_clean[which(georgia_clean$univ_outl_count == 3),]
 ```
 
 ```{r}
 # We are going to a create a correlation matrix of those columns
-georgia_interest = georgia[,c(13,14,17,19,20,21,25,27,28,31,40)]
-cor_outl = cor(georgia_interest)
+georgia_interest = georgia_clean[,c("longitude", "latitude", "price", "bathrooms", "bedrooms", "yearBuilt", "livingArea", "zipcode", "garageSpaces", "univ_outl_count")]
+# Use pairwise.complete.obs to ignore NAs in each pair of variables
+cor_outl = cor(georgia_interest, use = "pairwise.complete.obs")
 par(mfrow=c(1,1))
 corrplot(cor_outl, method = 'number', number.cex = 0.5)
 ```
 
+**Data Imputation**
+
+Here we will use imputePCA function to impute numerical data and imputeMCA for categorical variables.
+
+```{r}
+# We will use imputePCA to impute numerical variables
+res.misMDA <- imputePCA(georgia_clean[, c(2,4:16)]) # Choosing numerical variables
+# Get the completed dataset
+georgia_clean[, c(2,4:16)] <- res.misMDA$completeObs
+```
+
+```{r}
+# We will use imputeMCA to impute categorical variables
+res.misMDA <- imputeMCA(georgia_clean[,c(1,3,17:19)]) # Choosing categorical variables
+# Get the completed dataset
+georgia_clean[, c(1,3,17:19)] <- res.misMDA$completeObs
+```
+
+```{r}
+summary(georgia_clean) # The distribution of the imputed dataset seems to align the previous one
+```
+
 **Multivariate Analisis**
 
-Moutlier is applied on the numerical variables to find multivariate outliers. With the garageSpaces variable included, however, the method returns a singular matrix. Therefore this variable is excluded from the calculation. A very mild threshold of 0.025% is chosen as signficance level because is already returns a significant amount of outliers. This makes up around 5% of the total amount of instances. It is chosen to delete these outliers from the data set for the rest of the project. 
+Moutlier is applied on the numerical variables to find multivariate outliers. With the garageSpaces variable included, however, the method returns a singular matrix. Therefore this variable is excluded from the calculation. A very mild threshold of 0.025 % is chosen as signficance level because is already returns a significant amount of outliers. This makes up around 7% of the total amount of instances. It is chosen to delete these outliers from the data set for the rest of the project. 
 
 ```{r}
 # Use Moutlier that applies Mahalanobis distances to detect multivariate outliers
-res.out = Moutlier(georgia[,c(13,14,17,19,20,21,25,27,28)], quantile = 0.975, col="green") # Condidence level of 97.5%
+res.out = Moutlier(georgia_clean[,c("longitude", "latitude", "price", "bathrooms", "bedrooms", "yearBuilt", "livingArea", "zipcode")], quantile = 0.975, col="green") # Condidence level of 97.5%
 ```
 
 ```{r}
 length(which((res.out$md > res.out$cutoff)&(res.out$rd > res.out$cutoff))
- )/nrow(georgia)
+ )/nrow(georgia_clean)
 ```
 
 ```{r}
@@ -1206,213 +1282,127 @@ plot(res.out$md, res.out$rd, xlab = "Mahalanobis Distance", ylab = "Robust Dista
 abline(h=res.out$cutoff, col="red") 
 abline(v=res.out$cutoff, col="red") 
 
-# Limit the y and x axis
-plot(res.out$md, res.out$rd,
-     xlab = "Mahalanobis Distance",
-     ylab = "Robust Distance",
-     xlim = c(0, 20), # set x-axis limit
-     ylim = c(0, 70)) # set y-axis limit
-abline(h = res.out$cutoff, col = "red", lwd = 2)
-abline(v = res.out$cutoff, col = "red", lwd = 2)
-
 ```
 
 ```{r}
-# Summary of only outliers
-summary(georgia[which((res.out$md > res.out$cutoff)&(res.out$rd > res.out$cutoff)),])
+# Summary of only multivariate outliers
+summary(georgia_clean[which((res.out$md > res.out$cutoff)&(res.out$rd > res.out$cutoff)),])
 ```
 
 ```{r}
 # Summary of the original dataset
-summary(georgia)
+summary(georgia_clean)
+```
+
+```{r}
+# Remove those observations from the dataset
+georgia_clean = georgia_clean[-which((res.out$md > res.out$cutoff)&(res.out$rd > res.out$cutoff)),] 
 ```
 
 **Profiling**
 
+## Determine if the target variable (price) has an acceptably normal distribution. Address test to discard serial correlation. 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Data Cleaning
+Now, we'd like to determine if the response variable (price) has an acceptably normal distribution. In addition, we used the acf() function to test for autocorrelation. The results indicate that the variable is not normally distributed and exhibits significant autocorrelation. The first few lags show high and positive autocorrelation, then it decreases gradually, indicating that values of price are correlated with their past values (the data are not independent). Therefore, the dataset is randomized to remove serial correlation before further analysis.
 
 ```{r}
-# We store the cleaned version of the data here
-filtered_georgia <- georgia
+# Plots the autocorrelation function to detect serial correlation in the data.
+acf(georgia_clean$price)
+# Serial correlation means that observations in our data are related across time, rather than being completely random or independent.
 ```
 
 ```{r}
-# First, let's check if there is any missing values in the datase
-sum(is.na(georgia)) # There are no NAs in the dataset
+# We can choose at most 5000 samples for shapiro test
+ll <- sample(1:nrow(georgia_clean),nrow(georgia_clean), size = 5000) # Shuffling indexes
+georgia_clean <- georgia_clean[ll,] # Shuffling data
+acf(georgia_clean$price) 
 ```
 
 ```{r}
-# Next, we should filter and remove all observations that were not posted in 2021 and some validation based on common sense like bathrooms and bedrooms should be higher than 0.
-georgia_2021_only <- georgia %>%
-  filter(year(datePostedString) == 2021) %>%
-  distinct() # Retain unique rows
+# We can choose at most 5000 samples for shapiro test
+shapiro.test(georgia_clean$price[1:5000]) # Use the first 5000 obs
 
-# While there are obs where the number of bathrooms and bedrooms is 0, there are no obs where the price is lower o equal to 0: length(which(georgia$price > 0)) == 6168
+# H0: The price variable is normally distributes
+# H1: The price variable is NOT normally distributes
 
-# After applying this filter, the new number of rows is 6097
+# Since the p-value < 0.05, we reject H0.
 
+# The variable georgia$price does not follow a normal distribution, it significantly deviates from normality.
 ```
 
 ```{r}
-# Interestingly, the column id does not have the same number of unique values as the number of obs.
-nrow(georgia_2021_only) == length(unique(georgia_2021_only$id)) # 6097 vs 5448
+# This checks whether a sample comes from a specific theoretical distribution, in this case, a normal distribution with the same mean and standard deviation as our data.
+ks.test(georgia_clean$price, 'pnorm', mean(georgia_clean$price), sd(georgia_clean$price))
 
-# On the other hand, the columns X.1 and X have the exact number of unique values as rows
-length(unique(georgia_2021_only$X.1)) # 6097
-length(unique(georgia_2021_only$X)) # 6098
+# H0: georgia$price follows a normal distribution with the given mean and standard deviation
+# H1: georgia$price does not follow that normal distribution.
 
-# Since the columns X.1 and X do not provide any relevant information, we are just going to concatenate them to the tail of the column id, so it will have a unique value for every obs. Although the id itself is neither useful, we can still use it to identify the observations.
-georgia_2021_only$id_unique <- paste0(georgia_2021_only$id, "_", 
-                                      georgia_2021_only$X.1, "_", 
-                                      georgia_2021_only$X)
+# Because the p-value < 0.05, we reject H0.
 
-# Move id_unique to the front and drop the old columns
-georgia_2021_only <-
-  georgia_2021_only[, c(ncol(georgia_2021_only), 1:ncol(georgia_2021_only)-1)]
-georgia_2021_only$X.1 <- NULL
-georgia_2021_only$X <- NULL
-georgia_2021_only$id <- NULL
-
+# The K-S test confirms that the distribution of georgia$price significantly deviates from normality, meaning the data is not normally distributed.
 ```
 
 ```{r}
-# Let's check if there are columns that have only one value across the dataset
-sapply(georgia_2021_only,n_distinct)
-
-# Note that stateId, country, state, hasBadGeoCode and currency only have one factor throughout the dataset (16, USA, GA, 0, USD). These columns do not provide anything to the posterior analysis, so they should be eliminated. The following line removes all constant columns.
-georgia_value_rem <- georgia_2021_only[,
-              sapply(georgia_2021_only, function(x) length(unique(x)) > 1)]
-
+# Plot a histogram of price with a density curve
+ggplot(data = georgia_clean, aes(x = price, y = after_stat(density))) + 
+  geom_histogram(breaks = seq(0, max(georgia_clean$price), by = 10000),
+                 col = "lightblue",
+                 fill = "steelblue") +
+  geom_density(lwd = 1, col = "red") +
+  labs(title = "Histogram of Price with Density Curve",
+       x = "Price",
+       y = "Density")
 ```
+
+## Indicate by exploration of the data which are apparently the variables most associated with the target variable (use only the indicated variables). 
+
+To do this, the condes function of the FactoMiner package is used, which for the 
+numeric target variable 'price' calculates the correlation of each of the quantitative variables and the coefficient of determination (R^2) for the qualitative variables, together with a p-value for significance.
+
+For the quantitative variables, it is clear that both livingArea and bathrooms are highly significant and positively correlated with price (r > 0.50, p = 0). This is logical, as larger properties with more bathrooms tend to cost more. Although, theoretically, bedrooms might be expected to have a stronger correlation with price, bathrooms appear more decisive, possibly because properties in Georgia do not always need many bedrooms. Longitude and zipcode are negatively correlated with price (r < -0.10, p ~ 0), which is also expected, reflecting that certain geographic areas tend to have lower property values.
+
+For the qualitative variables, it is clear that city explains the most variance in the price variable (R^2 = 0.38, p ~ 0), followed by county (R^2 = 0.25) and levels_mapped (R^2 = 0.19), all highly significant. This is expected, as geographic location and property layout strongly influence housing prices. Other categorical variables, such as homeType, have a much smaller effect (R^2 ~ 0.02), indicating only a minor association with price. Overall, the influence of qualitative variables decreases in the order: city, county, levels_mapped, homeType, with some variables contributing very little to explaining price variation. This aligns with expectations, as variables like location tend to dominate price determination, while others such as property type have comparatively limited impact.
 
 ```{r}
-# We found that the columns is_bankOwned and is_forAuction only have one positive case for each of them in the filtered dataset. We should also remove these columns, since 99% of the rows have 0 in these two columns.
-sum(georgia_value_rem$is_forAuction == 1)
-#georgia_value_rem[which(georgia_value_rem$is_bankOwned == 1),]
-sum(georgia_value_rem$is_bankOwned == 1)
-#georgia_value_rem[which(georgia_value_rem$is_forAuction == 1),]
+# Displays the summary of quantitative variables most related to the 2th column (price), showing how each numeric variable contributes or associates with it.
+res.con = condes(georgia_clean,2) # The column corresponding to price
 
-# Remove columns
-georgia_value_rem$is_bankOwned <- NULL
-georgia_value_rem$is_forAuction <- NULL
+# Quantitative variables
+res.con$quanti
+# The p.value here assesses statistical significance of the correlation between each variable and price
+
+# Qualitative variables
+res.con$quali
+# The coefficient of determination measures the proportion of variance in price explained by each categorical variable
 ```
 
-```{r}
-# In the city column there are some factors registered in uppercase, we can also remove white spaces that might appear at the beginning and the end of each city.
-unique(factor(georgia_value_rem$city))[293] # JOHNS CREEK
-
-# The following line corrects that structure error
-georgia_value_rem <- georgia_value_rem %>%
-  mutate(
-    city = city %>% str_trim() %>% str_to_title(),
-    # Remove spaces and capitalize the first letter.
-)
-
-# Now the number of unique factors reduced from 380 to 370
-
-```
-
-```{r}
-# The column levels is messy and not consistent, since it has both numeric and categorical labels
-unique(factor(georgia_value_rem$levels))
-
-# We are going to perform an explicit mapping for the 35 observed raw values
-mapping <- c(
-  "One and One Half"                          = "1.5",
-  "One"                                       = "1",
-  "Two"                                       = "2",
-  "Three Or More"                             = "3+",
-  "Multi/Split"                               = "multi",
-  "Multi/Split-Split Level"                   = "multi",
-  "0"                                         = NA,
-  "One-Two Story Foyer"                       = "multi",
-  "Tri Level"                                 = "split",
-  "2.5 Story"                                 = "2.5",
-  "Manufactured Home 1 Story"                 = "manufactured",
-  "Two-Split Foyer"                           = "split",
-  "One and One Half-Split Level"              = "multi",
-  "Split Foyer"                               = "split",
-  "One and One Half-Two"                      = "multi",
-  "Two-Two Story Foyer"                       = "multi",
-  "One and One Half-Multi/Split"              = "multi",
-  "Three Or More-Two Story Foyer"             = "3+",
-  "One-Two"                                   = "multi",
-  "One-One and One Half"                      = "multi",
-  "One-Manufactured Home 1 Story"             = "manufactured",
-  "Multi/Split-Two"                           = "multi",
-  "Two-Multi/Split"                           = "multi",
-  "One-Other"                                 = "other",
-  "Two-Three Or More"                         = "multi",
-  "One-One and One Half-Two"                  = "multi",
-  "Three Or More-Split Level-Tri-Level"       = "3+",
-  "Two-Foyer - 2 Story"                       = "2",
-  "Other-See Remarks"                         = "other",
-  "Split Level"                               = "split",
-  "3 Story"                                   = "3+",
-  "Two-Split Level"                           = "split",
-  "One-Mobile Home 1 Story"                   = "manufactured",
-  "Tri Level-Split Level"                     = "split",
-  "Tri-Level"                                 = "split"
-)
-
-# Apply mapping
-georgia_value_rem <- georgia_value_rem %>%
-  mutate(
-    levels = mapping[as.character(levels)],
-  )%>%
-  filter(!is.na(levels)) # Rental houses with 0 stories are not possible, they need removing
-
-```
+## Define a polytomic factor f.yearBuilt for the building year of a house according to its quartiles and argue if the average price depends on the age of the building. Statistically justify the answer.
 
 
-```{r}
-# which(georgia_2021_only$hasGarage == 1 & georgia_2021_only$garageSpaces == 0) -> is that even possible?
-```
-
-```{r}
-# There are some columns that do not provide any useful information at all, like description, streetAddress, ... Can we eliminate them?
-```
 
 
-\newpage
 
-```{r}
-# Retain all data have datePostedString == 2021
-nrow(georgia) - sum(georgia$datePostedString == "2021")
-georgia2021 <- georgia[georgia$datePostedString == 2021,]
-```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
