@@ -1376,8 +1376,259 @@ res.con$quali
 # The coefficient of determination measures the proportion of variance in price explained by each categorical variable
 ```
 
+Later, when we make our final model to predict the price of buildings, we will consider the top variables that appear above. For numerical variables, we will choose those with a correlation greater than 0.3 and for categorical variables, those with R2 value higher than 0.15.
+
 ## Define a polytomic factor f.yearBuilt for the building year of a house according to its quartiles and argue if the average price depends on the age of the building. Statistically justify the answer.
 
+```{r}
+# Create the polytomic factor by yearBuilt quartiles
+yrs <- georgia_clean$yearBuilt
+qs <- quantile(yrs, probs = c(0, 0.25, 0.5, 0.75, 1))
+georgia_clean <- georgia_clean %>%
+  mutate(f.yearBuilt = cut(yearBuilt,
+                           breaks = qs,
+                           include.lowest = TRUE,
+                           labels = c("Old","MidOld","New","Newest")))
+```
+
+Given the evidence below, we argue that the price is dependent on the level of yearBuilt. Firstly, in the boxplots it can be observed that the older the building (Q1) the lower the median price of the establishment This is also seen clearly in the distribution plot below. Secondly, the Wilcoxon test shows that the medians across the yearBuilt levels are not equal, indicating a statistically significant relationship between building age and price.
+
+```{r}
+# Price distribution differs across building-age groups
+ggplot(georgia_clean, aes(x=price, fill=f.yearBuilt)) + geom_density(alpha=.5)
+
+# Boxplots
+ggplot(georgia_clean, aes(y=price, fill=f.yearBuilt)) + geom_boxplot(alpha=0.5)
+```
+
+We perform pairwise wilcoxon test to check for similar medians. Looking at the boxplot and distribution plot we can already expect that these are not going to be similar. The result of the wilcoxon test indicates our hypothesis was right that there is a clear difference between the medians of the different quartiles.
+
+```{r}
+# The following non-parametric test checks whether the median prices between each pair of building-age groups differ significantly.
+pairwise.wilcox.test(georgia_clean$price, georgia_clean$f.yearBuilt)
+
+# H0: Median(price_1) = Median(price_2)
+# H1: Median(price_1) != Median(price_2)
+
+# Since all p-values are extremely small (p < 0.05), we reject H0 for all pairs, meaning the median prices differ significantly between at least some of the f.yearBuilt categories.
+```
+
+## Calculate and interpret the anova model that explains rental house price according to the building year factor and the home type
+
+The calculation and interpretation of the anova model that explains the rental house price according to the building year factor and home type. First, box plots of the home type and building year factor are presented to show that there is variability in the means of both factors, meaning that they both could have significant influence on the rental house price. Next to the boxplots, wilcoxon and oneway tests are performed to assess if the medians and means of the categories in the factors are statistically different and if the variances between the categories in the factors are statistically different.
+
+```{r}
+
+# Summarizes the frequency of each homeType category
+summary(georgia_clean$homeType)
+
+# Creates boxplots of price for each homeType
+boxplot(price ~ homeType, data = georgia_clean)
+
+# Displays boxplots of price grouped by building-age quartiles
+boxplot(price ~ f.yearBuilt, data = georgia_clean)
+
+# Tests if median prices differ significantly between building-age groups
+pairwise.wilcox.test(georgia_clean$price, georgia_clean$f.yearBuilt)
+
+# Tests if median prices differ significantly between home types
+pairwise.wilcox.test(georgia_clean$price, georgia_clean$homeType)
+
+# One-way ANOVA to test if mean prices differ significantly between building-age groups
+oneway.test(georgia_clean$price~georgia_clean$f.yearBuilt)
+
+# One-way ANOVA to test if mean prices differ significantly between home types
+oneway.test(georgia_clean$price~georgia_clean$homeType)
+
+# One-way Anove test:
+# H0: Mean(category_1) = Mean(category_2) = Mean(category_3) = Mean(category_4)
+# H1: Not all mean prices are equal across the groups
+
+# ANOVA p-value < 0.05 -> reject H0
+# There is a significant difference in mean prices between some groups
+```
+
+From the interaction plots, it can be observed that the building year factor has a large influence on the price, and that although smaller, the home types also influence the price. Moreover, it’s important to note that for the home type multi_family, there are no observations for the MidOld and Newest building year categories, which may limit the interpretation of interaction effects. It seems that newer buildings consistently yield higher prices across most home types, while older properties tend to cluster around lower price range.
+
+```{r}
+# Note that some combinations do not exist, so they won't appear in the plot
+table(georgia_clean$homeType, georgia_clean$f.yearBuilt)
+# For home types MidOld, New (only 1) and Newest we do not have observations
+ 
+par(mfrow=c(1,1)) 
+# Create an interaction plot of price by homeType and f.yearBuilt
+interaction.plot(georgia_clean$homeType, georgia_clean$f.yearBuilt, georgia_clean$price)
+# Create an interaction plot of price by f.yearBuilt and homeType
+par(mfrow=c(1,1)) 
+interaction.plot(georgia_clean$f.yearBuilt, georgia_clean$homeType, georgia_clean$price)
+```
+
+Five linear models are created in order to assess the interaction between the factors. These models are:
+
+- m0: Null model, which models the price vs a constant.
+- m1: Interaction model, which models the price vs the building year factor times the home type factor.
+- m2: Interaction model, which models the price vs the building year factor plus the home type factor. 
+- m3: standard model, which models the price vs the building year factor.
+- m4: standard model, which models the price vs the home type factor.
+
+```{r}
+options(contrasts = c("contr.treatment", "contr.treatment")) 
+m0 <- lm(price ~ 1, data=georgia_clean) # baseline model
+m1 <- lm(price ~ f.yearBuilt * homeType, data=georgia_clean) 
+m2 <- lm(price ~ f.yearBuilt + homeType, data=georgia_clean) 
+m3 <- lm(price ~ f.yearBuilt, data=georgia_clean) # model based on building year
+m4 <- lm(price ~ homeType, data=georgia_clean) # model based on home type
+```
+
+Next, the summaries of the standard models are considered to see how much of the variation in the price variable these are able to explain. Interestingly, both standard models do not explain the same amount of variation, the standard model based on building year factor explains 0.1039 (10.4%) and the one based on home type explains 0.01854 (1.8%), which might indicate that the building year (age of the property) has a much stronger influence on price than the type of home itself. In other words, how recently a house was built contributes more to explaining price differences than whether it is a single-family, townhouse, or multi-family dwelling. This suggests that the market values newer constructions more heavily, while the structural category of the home plays a comparatively minor role in determining price.
+
+```{r}
+summary(m1) # price ~ f.yearBuilt * homeType
+```
+
+```{r}
+summary(m2) # f.yearBuilt + homeType
+```
+
+```{r}
+summary(m3) # model based on building year
+```
+
+```{r}
+summary(m4) # model based on home type
+```
+
+Here we focuse on inspecting the models for home type and building year. From the diagnostic plots of both models, particularly the Normal Q-Q plots, it can be seen that the residuals deviate from normality, suggesting that a data transformation (e.g. log of price) may be necessary to better meet linear model assumptions.
+
+```{r}
+# Model of building year factor
+par(mfrow=c(2,2)) 
+plot(m3, id.n = 0)
+
+# Model of home type
+par(mfrow=c(2,2)) 
+plot(m4, id.n = 0)
+
+# Residuals vs Fitted: The residuals are not randomly scattered, instead, they seem to form clusters at certain fitted values. There is also a tendency to aim for higher fitted values, indicating heteroscedasticity (variance of residuals increases with fitted values). The linear model may not fully capture the relationship, and the assumption of constant variance is violated.
+
+# Normal Q-Q: Most points are roughly along the line, but there are deviations at the extremes. Residuals are approximately normal, but there may be some outliers affecting the extremes.
+
+# Scale-location: This plot also checks for homoscedasticity. The results confirm heteroscedasticity seen in the Residuals vs Fitted plot. We may need to transform the response variable.
+
+# Residuals vs Leverage: This plot identifies influential points using Cook’s distance. In the first plot, most points have very high leverage and exceed the Cook's distance threshold significantly. In the second plot, there are a few points at the higher end of leverage but none exceed the Cook’s distance threshold significantly.
+
+##############################################
+
+# Linearity assumption: Possibly violated. We need to consider checking for nonlinear relationships.
+# Homoscedasticity: Not satisfied, variance increases with fitted values.
+# Normality of residuals: Mostly okay, minor deviations at extremes.
+# Influential points: The model m3 has severe outlier. The model m4 does not have severe outliers, but a few points have higher leverage.
+```
+
+
+```{r}
+anova(m2, m1)
+# RSS (Residual sum of squares): Model m1 has a slightly smaller RSS than Model m2 (1.6807e+14 < 1.6915e+14), meaning Model 2 explains more variance.
+# F-statistic = 4.574 with p-value = 4.181e-05 -> highly significant.
+
+# This means the interaction term f.yearBuilt:homeType significantly improves the model.
+# Significance codes *** indicate very strong evidence against the null hypothesis (H0: the interaction has no effect).
+```
+
+```{r}
+anova(m4, m3)
+# RSS: Model m3 has a smaller RSS than Model m4 (1.7200e+14 < 1.8838e+14), meaning Model m3 explains more variance.
+# This aligns with the reseaches we did before, the building year factor is more correlated with price than home type
+```
+
+Now that the factors are analyzed before a transformation on the target variable, 
+interaction between the factors will be considered using a transformation. Using BoxCox, it can be observed that a transformation can be performed. Since lambda is close to 0, a logarithmic transformation on the response variable seems suitable. Using this transformation the interaction plot can be observed, which shows that the influence seems to be mostly the same as the influence on the non transformed price.
+
+```{r}
+par(mfrow=c(1,1)) 
+boxcox(price ~ f.yearBuilt + homeType, data=georgia_clean)
+boxcox(price ~. , data=georgia_clean)
+```
+
+```{r}
+par(mfrow=c(1,1)) 
+interaction.plot(georgia_clean$homeType, georgia_clean$f.yearBuilt, georgia_clean$price)
+interaction.plot(georgia_clean$f.yearBuilt, georgia_clean$homeType, log(georgia_clean$price))
+```
+
+Now again, 5 models are created. After the transformation, both interaction models explain more variation than the once before transformation. However, they almost explain the same amount of variation compared to each other. The model on the age factor now 
+explains 42% and the model the fuel type factor 0.7%, which for both is improvement 
+compared to the non-transformed models. All models are significantly different from 
+the null model. Addition of both factors to the other model (comparing m2 to m3 and 
+m4) is also found to be significant. However, when comparing the interaction models 
+with each other, a p-value of 0.1186 was found, implying that after the transformation, 
+the interaction is not significant anymore. This could indicate that the interaction 
+found in the non-transformed price is explaining a sub-group that is not 
+distinguishable after the transformation. 
+
+```{r}
+m0l <- lm(log(price) ~ 1, data=georgia_clean) 
+m1l <- lm(log(price) ~ f.yearBuilt * homeType, data=georgia_clean) 
+m2l <- lm(log(price) ~ f.yearBuilt + homeType, data=georgia_clean) 
+m3l <- lm(log(price) ~ f.yearBuilt, data=georgia_clean) 
+m4l <- lm(log(price) ~ homeType, data=georgia_clean) 
+```
+
+```{r}
+anova(m2l, m1l)
+# RSS: Model m1l has a slightly smaller RSS than Model m2l (1526.3 < 1540.5), meaning Model m1l explains more variance.
+# F-statistic = 6.6403 with p-value = 7.677e-08 -> highly significant.
+
+# We reject the null hypothesis that stands that the interaction has no effect
+```
+
+```{r}
+anova(m3l, m2l)
+# RSS: Model m2l has smaller RSS than Model m3l (1540.5 < 1598.7), meaning Model m2l explains more variance.
+# F-statistic = 62.904 with p-value = 2.2e-16 -> highly significant.
+
+# We reject the null hypothesis that stands that the interaction has no effect
+```
+
+```{r}
+anova(m4l, m2l)
+# RSS: Model m2l has smaller RSS than Model m4l (1540.5 < 1799.9), meaning Model m2l explains more variance.
+# F-statistic = 280.22 with p-value = 2.2e-16 -> highly significant.
+
+# We reject the null hypothesis that stands that the interaction has no effect
+```
+
+```{r}
+# Model of building year factor
+par(mfrow=c(2,2)) 
+plot(m3l, id.n = 0)
+
+# Model of home type
+par(mfrow=c(2,2)) 
+plot(m4l, id.n = 0)
+
+# After applying logarithmic transformation on price, the data seem to be more aligned with the line suggesting normality.
+```
+
+## Defining the final model for price prediction
+
+use these varaibles:
+
+livingArea         0.71808267
+bathrooms          0.69805776
+bedrooms           0.50075997
+garageSpaces       0.41010260
+hasGarage          0.38938703
+yearBuilt          0.32367930
+
+city          0.376405294
+county        0.246788751
+levels_mapped 0.188126021
+
+```{r}
+# Let's 
+p_detector <- lm(log(price) ~ 1, data=georgia_clean) 
+```
 
 
 
@@ -1405,5 +1656,37 @@ res.con$quali
 
 
 
+
+
+
+
+
+
+
+
+## Do you think that the variability of the price depends on both factors? Does the relation between price and building year factor depend on homeType?
+
+????
+
+## Calculate the linear regression model that explains the price from the age of the building: interpret the regression line and assess its quality.
+
+???
+
+## What is the percentage of the price variability that is explained by the age of the building?
+
+??
+
+```{r}
+# In case we want to add livingArea as a categorial variable
+
+# Create the polytomic factor by livingArea quartiles
+larea <- georgia_clean$livingArea
+qs <- quantile(larea, probs = c(0, 0.25, 0.5, 0.75, 1))
+georgia_clean <- georgia_clean %>%
+  mutate(f.livingArea = cut(livingArea,
+                           breaks = qs,
+                           include.lowest = TRUE,
+                           labels = c("LowLA","LowMidLA","HighMidLA","HighLA")))
+```
 
 
