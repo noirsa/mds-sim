@@ -1154,7 +1154,14 @@ out <- calculate_outliers(georgia_clean$price)
 # Update the column univ_outl_count
 georgia_clean[out$extreme_indexes, "univ_outl_count"] = georgia_clean[out$extreme_indexes, "univ_outl_count"] + 1
 # Add NAs
+# see what happen in extreme, because this is target value, we cannot do imputation.
+extreme_rows <- georgia_clean[out$extreme_indexes, , drop = FALSE]
+extreme_rows
+
+# we can see extreme outliers are luxury house, we can remove them, now we add na to label them.
 georgia_clean[out$extreme_indexes, "price"] <- NA
+
+
 ```
 
 ```{r}
@@ -1244,6 +1251,8 @@ corrplot(cor_outl, method = 'number', number.cex = 0.5)
 Here we will use imputePCA function to impute numerical data and imputeMCA for categorical variables.
 
 ```{r}
+# first we remove all na's in target price to avoid imputation to target value.
+georgia_clean <- drop_na(georgia_clean,"price")
 # We will use imputePCA to impute numerical variables
 res.misMDA <- imputePCA(georgia_clean[, c(2,4:16)]) # Choosing numerical variables
 # Get the completed dataset
@@ -1614,22 +1623,123 @@ plot(m4l, id.n = 0)
 
 use these varaibles:
 
-livingArea         0.71808267
-bathrooms          0.69805776
-bedrooms           0.50075997
-garageSpaces       0.41010260
-hasGarage          0.38938703
-yearBuilt          0.32367930
+livingArea         0.71253474
+bathrooms          0.68235001  
+bedrooms           0.48273383 
+garageSpaces       0.40949007  
+hasGarage          0.41334035 
+yearBuilt          0.33465142 
 
-city          0.376405294
-county        0.246788751
-levels_mapped 0.188126021
+city          0.371926225 
+county        0.249584926 
+levels_mapped 0.192143797 
 
 ```{r}
 # Let's 
 p_detector <- lm(log(price) ~ 1, data=georgia_clean) 
+summary(p_detector)
+```
+We start our first model using all the available numerical variables.
+From the Residuals vs Fitted plot, we observe that most residuals are centered around 0, which is good. However, the residuals are slightly more spread out for lower fitted values and tighter for higher fitted values, indicating that cheaper houses show more variability than expensive ones.
+The Q–Q Residuals plot supports this observation: the central part follows the normal line reasonably well, but there is a larger deviation in the lower tail and a smaller deviation in the upper tail.
+The Residuals vs Leverage plot shows a few influential observations, but they do not dominate the model.
+VIF values are around 3, so multicollinearity is not a concern and we do not need to remove variables.
+To better satisfy the assumptions of linear regression, we will apply appropriate transformations to the data.
+
+```{r}
+m5 <- lm(log(price) ~ livingArea + bathrooms + bedrooms +
+                           garageSpaces + hasGarage +
+                           yearBuilt,
+             data = georgia_clean)
+summary(m5)
+plot(m5)
+vif(m5)
+```
+Following, we present several plots of the relationship between the target varriable and the numeric variables, in order to know if they should be transformed. 
+From the scatterplots of the target variable against the numeric predictors, we can see that livingArea shows a non-linear pattern and likely requires a transformation (e.g. log or sqrt).
+For some of the other variables, the relationship is not clearly linear, so we may need to recode them into factors or grouped categories to improve the fit.
+```{r}
+ggplot(georgia_clean, aes(x = (livingArea), y = log(price))) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_minimal()
+
+ggplot(georgia_clean, aes(x = (bathrooms), y = log(price))) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_minimal()
+
+ggplot(georgia_clean, aes(x = (bedrooms), y = log(price))) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_minimal()
+
+ggplot(georgia_clean, aes(x = (garageSpaces), y = log(price))) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_minimal()
+
+ggplot(georgia_clean, aes(x = (hasGarage), y = log(price))) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_minimal()
+
+ggplot(georgia_clean, aes(x = (yearBuilt), y = log(price))) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_minimal()
+```
+First we try log tansformation for living area
+
+Compared to the previous model (Multiple R-squared:  0.5151), the new model improves the fit (Adjusted R-squared:  0.5375 ) and slightly reduces the residual standard error, so it is preferred
+```{r}
+m5_1 <- lm(log(price) ~ log(livingArea) + bathrooms + bedrooms +
+                           garageSpaces + hasGarage +
+                           yearBuilt,
+             data = georgia_clean)
+summary(m5_1)
+plot(m5_1)
+vif(m5_1)
+```
+First, we create a garage-capacity variable by combining the information from `hasGarage` and `garageSpaces`. The idea is to avoid using two correlated garage-related variables and to make the effect easier to interpret.
+
+We define three categories:
+
+- **No capacity**: `hasGarage == 0` or `garageSpaces == 0`
+- **Small**: exactly 1 parking space
+- **Big**: 2 or more parking spaces
+```{r}
+
+georgia_clean$garage_cap <- with(georgia_clean, ifelse(
+  is.na(hasGarage) & is.na(garageSpaces), NA,     
+  ifelse(hasGarage == 0 | garageSpaces == 0 | is.na(hasGarage), 0, garageSpaces)
+))
+
+georgia_clean$garage_cap <- with(georgia_clean, ifelse(
+  is.na(garage_cap), NA,                    
+  ifelse(garage_cap == 0, "No capacity",
+         ifelse(garage_cap == 1, "Small", "Big"))
+))
+
+georgia_clean$garage_cap <- factor(
+  georgia_clean$garage_cap,
+  levels = c("No capacity", "Small", "Big")
+)
 ```
 
+We now evaluate the new model.
+After replacing garageSpaces and hasGarage with the three-level garage-capacity factor, the model shows a slight improvement in R-squared. This means the new variable captures the garage effect more consistently.
+However, the QQ plot still shows deviations in the lower tail, so the model continues to have difficulties fitting low-price houses. This suggests that the remaining lack of fit is not due to the garage variables but likely to other unobserved factors (e.g. location or condition).
+GVIF values for all predictors are below 4, and the adjusted GVIF for the 3-level garage-capacity factor is close to 1 (≈1.08), indicating that multicollinearity is not a concern in this specification.
+```{r}
+m5_2 <- lm(log(price) ~ log(livingArea) + bathrooms + bedrooms +
+                             garage_cap +
+                           yearBuilt,
+             data = georgia_clean)
+summary(m5_2)
+plot(m5_2)
+vif(m5_2)
+```
 
 
 
