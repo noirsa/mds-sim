@@ -42,6 +42,7 @@ library(stringr)
 library(readr)
 library(tidyr)
 library(tidyselect)
+library(effects)
 ```
 
 ```{r}
@@ -1516,6 +1517,229 @@ interaction.plot(georgia_clean$f.yearBuilt, georgia_clean$homeType, georgia_clea
 
 ## 4. Customizing linear models to predict the Price variable
 
+We start our first model using all the available numerical variables.
+
+From the *Residuals vs Fitted plot*, we observe that most residuals are centered around 0, which is good. However, there is a noticeable pattern: the residuals appear more dispersed for lower fitted values and become tighter as fitted values increase. This suggests that cheaper houses show more variability than more expensive ones, indicating possible heteroscedasticity.
+
+The *Normal Q-Q plot* shows that the standardized residuals follow the theoretical normal line quite well in the middle range but deviate in both tails, more strongly in the upper tail. This indicates that the residuals are not perfectly normally distributed, with potential outliers or skewness affecting the fit.
+
+The *Scale-Location plot* confirms the observation of increasing spread of residuals, as the red trend line shows a slight upward slope, reinforcing the presence of heteroscedasticity.
+
+The *Residuals vs Leverage plot* shows that most observations have low leverage, and no points appear to have both high leverage and large standardized residuals, suggesting no influential outliers with undue impact on the model.
+
+Finally, since the Variance Inflation Factor (VIF) values are around 1, multicollinearity is not a concern, and all predictors can be retained.
+
+To better satisfy the linear regression assumptions, particularly homoscedasticity and normality, we will apply appropriate transformations to the data (such as log or BoxCox transformations).
+
+```{r}
+# Define the baseline model based on relevant numrical variables
+m1_0 <- lm(price ~ livingArea + yearBuilt + latitude, data = georgia_clean)
+# Summary of the model
+summary(m1_0) # Multiple R-squared: 0.5729; All coefficients are significant
+plot(m1_0)
+vif(m1_0)
+```
+
+Using the Box-Cox transformation, it can be observed that a transformation is appropriate. Since the estimated λ (lambda) is close to 0, (between 0 and 1) a logarithmic transformation of the response variable seems suitable.
+
+```{r}
+# Do I need to apply some transformation to my output?
+boxcox(price ~ livingArea + yearBuilt + latitude, data = georgia_clean)
+```
+
+In the following cell we assess whether we need to apply some transformations to the explanatory variables. The variable livingArea shows a MLE of lambda of 0.07663 (close to zero) that suggests a log transform is appropriate. The variable yearBuilt's MLE of lambda is far from 1, but since it is statistically insignificant, no transformation is needed. The variable latitude's MLE of lambda is also far from 1 and highly significant (p < 2e-16), but extreme lambda suggests instability, so we are going to standardize this variable first. After applying a minmax scale to the latitude, we get a MLE of lambda of -2.6976 and this suggests that we should apply a quadratic transformation to it.
+
+```{r}
+# Do I need to apply some transformations to my explanatory variables?
+boxTidwell(log(price) ~ livingArea + yearBuilt + latitude, data = georgia_clean)
+
+# Standardization needed for the variable latitude (min-max scale)
+georgia_clean$latitude.scaled <- ( georgia_clean$latitude -
+                                   min(georgia_clean$latitude)
+                                 ) / 
+                                 ( max(georgia_clean$latitude) -
+                                   min(georgia_clean$latitude)
+                                 ) + 1 # values between 1 and 2
+
+# Check the boxTidwell function again
+boxTidwell(log(price) ~ log(livingArea) + yearBuilt + latitude.scaled, data = georgia_clean)
+
+# Check the boxTidwell function after applying the quadratic transformation
+m1_1 <- lm(log(price) ~ log(livingArea) + yearBuilt + poly(latitude.scaled,2), data = georgia_clean)
+# Summary of the model
+summary(m1_1) # Multiple R-squared: 0.5835; All coefficients are significant
+plot(m1_1)
+vif(m1_1)
+
+residualPlots(m1_1)
+# The line is roughly horizontal and near 0
+# And the spread of residuals does not change much across x-values (homoscedasticity)
+avPlots(m1_1, id=list(method=list(cooks.distance(m1_1),"x"), n = 5))
+marginalModelPlots(m1_1)
+# The last two plots show slightly inclined lines around 0 and that means that
+# the model’s residuals still have a small amount of patterns unexplained
+# by our model. In other words, the relationship between the model and the
+# target variable price may be not fully linear, even after our current
+# transformations.
+
+```
+
+```{r}
+# Here we can see the log effect of livingArea and the quadratic effect for latitude
+plot(allEffects(m1_1, transformation=list(link=log, inverse=exp)))
+```
+
+```{r}
+# In this cell we investigate if it is really worthy to apply a quadratic
+# transformation to the latitude variable
+# In order to use anove on two nested models, we apply log transformations to
+# the variables price and livingArea to the model m1_0
+m1_0t <- lm(log(price) ~ log(livingArea) + yearBuilt + latitude, data = georgia_clean) # linear effect of latitude
+m1_1 <- lm(log(price) ~ log(livingArea) + yearBuilt + poly(latitude.scaled,2), data = georgia_clean) # quadratic effect of latitude
+
+anova(m1_1, m1_0t) # The model m1_1t contains m1_0t, these two are nested
+# H0: The shorter model is the best
+# Since the p-value is near 0, we reject the null hypothesis thus we opt for
+# the complex model
+
+# We can also check the AIC values of each model
+AIC(m1_1) # 4904.767 -> AIC value is lower, we opt for it
+AIC(m1_0t) # 5160.026
+
+```
+
+```{r}
+# Influential observations analysis:
+llres <- which(abs(rstudent(m1_1))>3); llres
+# rstudent residuals are a type of residuals that follow a t-student distribution
+# In a t-student distribution, the probability of value to be higher than 3 is very small.
+georgia_clean[llres,] # these are the influential observations found using llres
+
+# A priori influential observations:
+# Check which observations have a leverage higher than 3*p/n
+llhat <- which(hatvalues(m1_1)>3*length(coef(m1_1))/nrow(df)); llhat
+# No observations have a leverage higher than 3*p/n
+
+# Check influential observations and remove them from the dataset
+llcoo <- Boxplot(cooks.distance(m1_1), id=list(n=10,labels=row.names(georgia_clean)))
+influencePlot(m1_1) # the ids of influential observations also appear in llcoo
+ll <- which(row.names(georgia_clean) %in% llcoo); ll # find row ids of them
+georgia_clean <- georgia_clean[-ll,] # remove them from the dataset
+```
+
+```{r}
+# Let's create another model based on the cleaned dataset
+m1_2 <- lm(log(price) ~ log(livingArea) + yearBuilt + poly(latitude.scaled,2), data = georgia_clean)
+```
+
+Previously we created a discretized variable from the quartiles of the numeric variable yearBuilt and now we want to check whether it is better to add this variable as a numeric or discretized variable.
+
+```{r}
+# Check proportions
+table(georgia_clean$f.yearBuilt)
+
+# Do note that when we add a categorical variable as an explanatory variable to a linear model, the number of coefficients we obtain associated to this variable is the number of categories - 1. 
+# The category that is not on the estimation is the baseline category (comes from baseline reparametrization).
+# The coefficient associated to this category is assumed to be equal to (alpha_1=0)
+
+# Build a similar model to m1_2 using discretized varaible f.yearBuilt
+m1_3 <- lm(log(price) ~ log(livingArea) + f.yearBuilt + poly(latitude.scaled,2), data = georgia_clean)
+summary(m1_3)
+# Estimate: effects over the baseline category (the baseline here is 'Old')
+# If we go from MidOld to Newest, the values will increase in 0.13452 (0.16112 - 0.02660)
+
+# We need to compare between two models:
+AIC(m1_2, m1_3) # As the Akaike value is lower in m1_2, we will use the numerical one
+# They are not nested, they have the same number of explanatory variables,
+# but they do not have the same number of categories
+```
+
+Next, we will add main effects of factors. We will only include those relevant factors found using previously in the profiling section through the condes() function from the FactoMineR library.
+
+```{r}
+# Add relevant categorized numeric variables
+m2 <- lm(log(price) ~ log(livingArea) + 
+                        yearBuilt + 
+                        poly(latitude.scaled,2) +
+                        bathrooms +
+                        city +
+                        county +
+                        bedrooms + 
+                        levels_mapped + 
+                        garageSpaces + 
+                        hasGarage +
+                        spa +
+                        parking + 
+                        pool + 
+                        homeType, data = georgia_clean)
+# We only print the Multiple R-squared value,
+# since city and county have too many categories
+summary(m2)$r.squared
+
+```
+
+After adding categorical variables to the model, we will study the interactions between different numerical and categorical variables.
+
+```{r}
+# Interaction: yearBuilt:bathrooms
+m3_0 <- lm(log(price) ~ log(livingArea) *
+                        bathrooms +
+                        yearBuilt + 
+                        poly(latitude.scaled,2) +
+                        city +
+                        county +
+                        bedrooms + 
+                        levels_mapped + 
+                        garageSpaces + 
+                        hasGarage +
+                        spa +
+                        parking + 
+                        pool + 
+                        homeType, data = georgia_clean)
+summary(m3_0) # Having Little bathrooms, the values increase in 0.796 units
+
+# Does the effect (by default 0.796) of log(livingArea) depend on the number of bathrooms?.
+# Does the slope change if we have Little, Mant or Excessive bathrooms?
+
+# We use log(livingArea) * bathrooms
+# We have two extra categories:
+# If we have (baseline) log(livingArea):bathroomsLittle-Bathrooms -> log(livingArea): 0.796
+# If we have (new) log(livingArea):bathroomsMany-Bathrooms -> log(livingArea): 0.796 + 0.844 = 1.64
+# If we have (new) log(livingArea):bathroomsExcessive-Bathrooms -> log(livingArea): 0.796 + 3.30 = 4.096
+
+# Plotting the effects of the interaction
+plot(Effect(c("bathrooms", "livingArea"), m3_0,
+            transformation=list(link=log, inverse=exp)),
+     axes=list(y=list(lab="price")))
+
+# Testing the model with the previous model
+anova(m2, m3_0) # low p-value suggests that the model m3_0 is better
+
+# Which variable are relevant?
+Anova(m3_0) # Anova checks the significance of all categorical variables
+# It seems that all variables we have so far are significant
+step(m3_0) # step function also suggests that the current setup is suitable, we do
+# not need to remove variables
+AIC(m3_0) # 1846.241
+
+
+
+
+
+
+
+# Try more interactions ->>>>>>>>> TODO
+# Try more interactions ->>>>>>>>> TODO
+# Try more interactions ->>>>>>>>> TODO
+# Try more interactions ->>>>>>>>> TODO
+# Try more interactions ->>>>>>>>> TODO
+```
+
+```{r}
+# Validation of the final model?
+# -> with graphs and / or suitable tests to verify model assumptions.
+```
+
 
                 correlation       p.value
 livingArea        0.7319158  0.000000e+00
@@ -1542,33 +1766,32 @@ isNewConstruction 0.002007604  1.529209e-03
 
 
 
-We start our first model using all the available numerical variables.
 
-From the Residuals vs Fitted plot, we observe that most residuals are centered around 0, which is good. However, the residuals are slightly more spread out for lower fitted values and tighter for higher fitted values, indicating that cheaper houses show more variability than expensive ones.
 
-The Q-Q Residuals plot supports this observation: the central part follows the normal line reasonably well, but there is a larger deviation in the lower tail and a smaller deviation in the upper tail.
 
-VIF values are around 3, so multicollinearity is not a concern and we do not need to remove variables. To better satisfy the assumptions of linear regression, we will apply appropriate transformations to the data.
 
-```{r}
-m1 <- lm(price ~ livingArea + yearBuilt + latitude, data = georgia_clean)
-summary(m1)
-plot(m1)
-vif(m1)
-```
 
-```{r}
-m1 <- lm(price ~ livingArea + bathrooms + bedrooms +
-                           garageSpaces + hasGarage +
-                           yearBuilt,
-             data = georgia_clean)
-summary(m1)
-plot(m1)
-vif(m1)
-```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Next, we present several plots of the relationship between the target variable and the numeric variables, in order to know if they should be transformed. From the scatterplots of the target variable against the numeric predictors, we can see that livingArea shows a non-linear pattern and likely requires a transformation (e.g. log or sqrt).
 For some of the other variables, the relationship is not clearly linear, so we may need to recode them into factors or grouped categories to improve the fit.
+
 ```{r}
 ggplot(georgia_clean, aes(x = (livingArea), y = log(price))) +
   geom_point() +
