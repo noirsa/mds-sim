@@ -1675,19 +1675,50 @@ m2 <- lm(log(price) ~ log(livingArea) +
 # We only print the Multiple R-squared value,
 # since city and county have too many categories
 summary(m2)$r.squared
-
+#step(m2)
 ```
-
-After adding categorical variables to the model, we will study the interactions between different numerical and categorical variables.
+ 
+Adding categorical variables improved performance, but the models became prone to overfitting. Because the city and county fields have high cardinality, and stepwise selection returned many NA coefficients, we decided to reduce their cardinality.
 
 ```{r}
-# Interaction: yearBuilt:bathrooms
-m3_0 <- lm(log(price) ~ log(livingArea) *
-                        bathrooms +
+
+georgia_clean$city <- as.character(georgia_clean$city)
+georgia_clean$county <- as.character(georgia_clean$county)
+tab_city <- table(georgia_clean$city)
+
+keep_cities <- names(tab_city[tab_city >= 20])
+tab_county <- table(georgia_clean$county)
+
+keep_counties <- names(tab_county[tab_county >= 15])
+
+georgia_clean$city_grp <- ifelse(
+  georgia_clean$city %in% keep_cities,
+  georgia_clean$city,
+  "Other"
+)
+
+
+georgia_clean$county_grp <- ifelse(
+  georgia_clean$county %in% keep_counties,
+  georgia_clean$county,
+  "Other"
+)
+
+georgia_clean$city_grp   <- factor(georgia_clean$city_grp,
+                                   levels = c(keep_cities, "Other"))
+georgia_clean$county_grp <- factor(georgia_clean$county_grp,
+                                   levels = c(keep_counties, "Other"))
+summary(georgia_clean$city_grp)
+summary(georgia_clean$county_grp)
+georgia_clean$city <- factor(georgia_clean$city)
+georgia_clean$county <- factor(georgia_clean$county)
+  
+m2_1 <- lm(log(price) ~ log(livingArea) + 
                         yearBuilt + 
                         poly(latitude.scaled,2) +
-                        city +
-                        county +
+                        bathrooms +
+                        city_grp +
+                        county_grp +
                         bedrooms + 
                         levels_mapped + 
                         garageSpaces + 
@@ -1696,6 +1727,28 @@ m3_0 <- lm(log(price) ~ log(livingArea) *
                         parking + 
                         pool + 
                         homeType, data = georgia_clean)
+summary(m2_1)$r.squared
+#step(m2_1)
+```
+
+After checking for overfitting, we will study the interactions between different numerical and categorical variables.
+```{r}
+# Interaction: yearBuilt:bathrooms
+m3_0 <- lm(log(price) ~ log(livingArea) *
+                        bathrooms +
+                        yearBuilt + 
+                        poly(latitude.scaled,2) +
+                        city_grp +
+                        county_grp +
+                        bedrooms + 
+                        levels_mapped + 
+                        garageSpaces + 
+                        hasGarage +
+                        spa +
+                        parking + 
+                        pool + 
+                        homeType, data = georgia_clean)
+
 summary(m3_0) # Having Little bathrooms, the values increase in 0.796 units
 
 # Does the effect (by default 0.796) of log(livingArea) depend on the number of bathrooms?.
@@ -1718,26 +1771,82 @@ anova(m2, m3_0) # low p-value suggests that the model m3_0 is better
 # Which variable are relevant?
 Anova(m3_0) # Anova checks the significance of all categorical variables
 # It seems that all variables we have so far are significant
-step(m3_0) # step function also suggests that the current setup is suitable, we do
+#step(m3_0) # step function also suggests that the current setup is suitable, we do
 # not need to remove variables
 AIC(m3_0) # 1846.241
 
-
-
-
-
-
-
-# Try more interactions ->>>>>>>>> TODO
-# Try more interactions ->>>>>>>>> TODO
-# Try more interactions ->>>>>>>>> TODO
-# Try more interactions ->>>>>>>>> TODO
-# Try more interactions ->>>>>>>>> TODO
 ```
+Now we added all interactions to the model and then used stepwise selection to obtain the best specification.
+```{r}
+
+m3_1 <- lm(log(price) ~ log(livingArea) *(
+                        bathrooms +
+                        yearBuilt + 
+                        poly(latitude.scaled,2) +
+                        city_grp +
+                        county_grp +
+                        bedrooms + 
+                        levels_mapped + 
+                        garageSpaces + 
+                        hasGarage +
+                        spa +
+                        parking + 
+                        pool + 
+                        homeType), data = georgia_clean)
+
+#step(m3_1)
+```
+After stepwise selection, the formula of best model is this
+log(price) ~ log(livingArea) + bathrooms + yearBuilt + 
+    poly(latitude.scaled, 2) + city_grp + county_grp + bedrooms + 
+    levels_mapped + garageSpaces + hasGarage + spa + parking + 
+    pool + homeType + log(livingArea):bathrooms + log(livingArea):yearBuilt + 
+    log(livingArea):poly(latitude.scaled, 2) + log(livingArea):county_grp + 
+    log(livingArea):bedrooms + log(livingArea):levels_mapped + 
+    log(livingArea):garageSpaces + log(livingArea):hasGarage + 
+    log(livingArea):spa + log(livingArea):parking + log(livingArea):pool + 
+    log(livingArea):homeType, data = georgia_clean
+
+The model obtains the following results in the training data: 
+
+Residual standard error: 0.2884 on 4747 degrees of freedom
+Multiple R-squared:  0.7837,	Adjusted R-squared:  0.7727 
+
+```{r}
+m4 = lm(log(price) ~ log(livingArea) + bathrooms + yearBuilt + 
+    poly(latitude.scaled, 2) + city_grp + county_grp + bedrooms + 
+    levels_mapped + garageSpaces + hasGarage + spa + parking + 
+    pool + homeType + log(livingArea):bathrooms + log(livingArea):yearBuilt + 
+    log(livingArea):poly(latitude.scaled, 2) + log(livingArea):county_grp + 
+    log(livingArea):bedrooms + log(livingArea):levels_mapped + 
+    log(livingArea):garageSpaces + log(livingArea):hasGarage + 
+    log(livingArea):spa + log(livingArea):parking + log(livingArea):pool + 
+    log(livingArea):homeType, data = georgia_clean)
+summary(m4)$r.squared
+```
+
+
 
 ```{r}
 # Validation of the final model?
 # -> with graphs and / or suitable tests to verify model assumptions.
+par(mfrow=c(2,2))
+plot(m4) 
+par(mfrow=c(1,1))
+
+library(ggplot2)
+pred <- fitted(m4); obs <- model.response(model.frame(m4))  
+ggplot(data.frame(pred, obs), aes(pred, obs)) +
+  geom_point(alpha=.3) + geom_abline(linetype=2) +
+  labs(x="Predicted log(price)", y="Observed log(price)")
+
+library(effects)
+plot(Effect(c("livingArea", "yearBuilt"), m4), multiline=TRUE, ci.style="bars")
+plot(Effect(c("livingArea", "bathrooms"), m4), multiline=TRUE, ci.style="bars")
+
+plot(Effect(c("livingArea", "parking"), m4), multiline=TRUE, ci.style="bars")
+
+
 ```
 
 
