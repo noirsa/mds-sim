@@ -1868,13 +1868,37 @@ summary(m4_1)$r.squared
 #step(m4_1)
 # Let's also check is there is multicollinearity presence in the  best model
 vif(m4_1, type = "predictor")
+
+# after stepwise selection we find 2 innecesary interaction (with bedrooms and bathrooms)
+m4_2= lm(log(price) ~ log(livingArea) *(   yearBuilt + county_grp + 
+      hasGarage + spa + pool + homeType)+ bedrooms + bathrooms + city_grp + 
+    garageSpaces + parking + levels_mapped + latitude.scaled , data = georgia_clean)
+anova(m4_2, m4_1) 
+vif(m4_2, type = "predictor")
+summary(m4_2)$r.squared
 ```
 
 Although severe multicollinearity (GVIF^(1/(2*Df)) > 10) still exists in the model, we decided to retain it as our best model and proceed with the validation process.
 
+Residuals are approximately centered at zero and roughly symmetric. The LOESS smooth shows a slight arch with a dip at higher fitted values, suggesting a mild remaining systematic pattern.
+
+The Q–Q plot shows points align with the 45° line in the center but diverge at both tails, indicating roughly symmetric, heavy-tailed residuals. Normality isn’t strictly satisfied, but the deviations are acceptable.
+
+The scale–location plot is nearly flat with a slight mid-range hump and no clear funnel, suggesting at most mild heteroskedasticity.
+
+The residuals–leverage plot shows most observations with low leverage  and a small tail, without large residuals. No points appear beyond the usual Cook’s distance contours, indicating no clearly influential observations.
+
+Observed vs. predicted log(price) aligns closely with the 45° line, indicating good calibration and fit; dispersion is modest and slightly larger in the mid-range, consistent with mild heteroskedasticity.
+
+Marginal plots indicate largely linear effects for log(livingArea) and yearBuilt, with a clearer hump for latitude.scaled. Overall fit is adequate.
+
+The influence plot shows most cases with low leverage; a small set exhibit elevated Cook’s D ("982","112","5129","5129.1","1926","5377"   "250","1665" ).
+
 ```{r}
 # The best model we obtained
-best_model <- m4_1
+
+
+best_model <- m4_2
 
 # Validation of the best model
 par(mfrow=c(2,2))
@@ -1889,21 +1913,19 @@ ggplot(data.frame(pred, obs), aes(pred, obs)) +
 
 library(effects)
 plot(Effect(c("livingArea", "yearBuilt"), best_model), multiline=TRUE, ci.style="bars")
-plot(Effect(c("livingArea", "bathrooms"), best_model), multiline=TRUE, ci.style="bars")
-
-plot(Effect(c("livingArea", "parking"), best_model), multiline=TRUE, ci.style="bars")
+plot(Effect(c("livingArea", "spa"), best_model), multiline=TRUE, ci.style="bars")
+plot(Effect(c("livingArea", "pool"), best_model), multiline=TRUE, ci.style="bars")
+plot(Effect(c("livingArea", "hasGarage"), best_model), multiline=TRUE, ci.style="bars")
+plot(Effect(c("livingArea", "homeType"), best_model), multiline=TRUE, ci.style="bars")
 
 # + 
 marginalModelPlots(best_model, id=list(n=5)) # Whether the model fits the data
+influential <- influencePlot(best_model,pch=19,id=list(method="noteworthy",n=3))
+rownames(influential)
 # The lines should be as close as possible
+```
 
-# +
-The validation of the model has to be done with graphs and / or suitable tests to verify 
-model assumptions. 
-
-# +
-The resulting model should be interpreted in terms of the relationships of selected 
-predictors and its effect on the response variable. 
+```{r}
 
 ```
 
