@@ -1902,7 +1902,7 @@ Before validating the model, we need to check the influential values again to en
 ```{r}
 # Checking influential values using influencePlot
 influential <- influencePlot(m4_2,pch=19,id=list(method="noteworthy",n=3))
-# we see NaN in Cook's D value because there are some influential values with hat value 1.
+
 rownames(influential)
 df_used <- model.frame(m4_2)   
 idx  <- as.integer(match(rownames(influential), rownames(df_used)))
