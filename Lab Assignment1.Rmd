@@ -1934,6 +1934,9 @@ The scale–location plot is nearly flat with a slight mid-range hump and no cle
 
 The residuals–leverage plot shows most observations with low leverage  and a small tail, without large residuals. No points appear beyond the usual Cook’s distance contours, indicating no clearly influential observations.
 
+
+Theoretically, we shoud not use the dataset used for training for testing. But since it is specified in the pdf that we do not need to split the dataset intk train and test sets, we did not do thta at the beginning of the script.
+
 On the training set, observed vs. predicted log(price) aligns closely with the 45° line, indicating good calibration and fit, dispersion is modest and slightly larger in the mid-range, consistent with mild heteroskedasticity.
 
 Marginal plots indicate largely linear effects for log(livingArea) and yearBuilt, with a clearer hump for latitude.scaled. Overall fit is adequate.
