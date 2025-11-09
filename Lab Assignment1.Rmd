@@ -1898,7 +1898,7 @@ summary(m4_2)$r.squared
 ```
 
 Before validating the model, we need to check the influential values again to ensure that any remaining influence on the model is minimized. The influence plot below shows most cases with low leverage. Then, we remove the flagged cases and refit the model on the cleaned sample.
-
+Comparing the Q–Q plots before and after removing these observations, there is a modest improvement in distributional fit.
 ```{r}
 # Checking influential values using influencePlot
 influential <- influencePlot(m4_2,pch=19,id=list(method="noteworthy",n=3))
@@ -1916,8 +1916,11 @@ m4_3= lm(log(price) ~ log(livingArea) *(   yearBuilt + county_grp +
 vif(m4_3, type = "predictor")
 summary(m4_3)$r.squared
 influencePlot(m4_3,pch=19,id=list(method="noteworthy",n=3))
+plot(m4_2, which = 2)
+plot(m4_3, which = 2)
 # After removing these influential values we can see that the upper bound is 0.0159
 ```
+
 
 
 Although severe multicollinearity (GVIF^(1/(2*Df)) > 10) still exists in the model, we decided to retain it as our best model and proceed with the validation process.
@@ -1962,6 +1965,51 @@ plot(Effect(c("livingArea", "homeType"), best_model), multiline=TRUE, ci.style="
 marginalModelPlots(best_model, id=list(n=5)) # Whether the model fits the data
 # The lines should be as close as possible
 summary(m4_3)
+```
+After completing validation, we conducted a broad influential-observation screen (studentized residuals, leverage, and Cook’s distance), removed the union of flagged cases, and refit the model.
+
+Out of 4,981 observations, we flagged over 437 as outliers/influential; sensitivity checks showed material impact on coefficients and diagnostics, so we removed the union of these cases and re-estimated on the cleaned sample as a robustness check.
+
+Comparison of the two sets of diagnostic plots
+
+residuals vs fitted: The LOESS line is flatter and the end curvature is weaker, indicating less systematic structure in the residuals.
+
+Q–Q plot: Tail departures shrink, especially on the right and the center now tracks the 45° line more closely.
+
+scale–location: The mid-range peak has dropped and the spread is more even, leaving at most mild heteroskedasticity.
+
+residuals–leverage: High-leverage cases now have smaller residuals, and no clear Cook’s-distance outliers are evident.
+
+We conclude that the identified influential observations materially affected the model, after removing them, diagnostic fit improved and the specification became more robust.
+```{r}
+# Identify observations with large studentized residuals (> 3), 
+# which may indicate outliers in terms of the response variable.
+llres <- which(abs(rstudent(m4_3)) > 3); llres
+
+# Identify observations with high leverage values, those that have 
+# an unusually strong influence on the fitted values. 
+# The threshold 3*p/n (where p = number of coefficients) is a common rule of thumb.
+llhat <- which(hatvalues(m4_3) > 3 * length(coef(m4_3)) / nrow(georgia_clean)); llhat
+
+# Plot Cook’s distance to visually identify influential points. 
+# The Boxplot function highlights observations with unusually high influence.
+llcoo <- Boxplot(cooks.distance(m4_3), id = list(labels = row.names(georgia_clean)))
+
+# Identify observations with Cook’s distance greater than 4/(n - p), 
+# which is another rule of thumb to flag influential cases 
+# that strongly affect the regression coefficients.
+llCH <- which(cooks.distance(m4_3) > 4 / (nrow(georgia_clean) - length(coef(m4_2)))); llCH
+
+# Combine all influential observation indices (row positions)
+influential_ids <- unique(c(llres, llhat, llcoo, llCH));length(influential_ids)
+# Remove them from the dataset
+georgia_clean_noinf <- georgia_clean[-as.numeric(influential_ids), ]
+
+# Refit the model on the cleaned data
+m4_4 <- update(m4_3, data = georgia_clean_noinf)
+par(mfrow=c(2,2))
+plot(m4_3)
+plot(m4_4)
 ```
 
 
