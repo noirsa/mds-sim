@@ -2,7 +2,10 @@
 title: "Lab Assignment 1"
 author: "Zheshuo and Geming"
 date: "2025-10-05"
-output: html_document
+output: 
+  pdf_document:
+    latex_engine: xelatex
+    keep_tex: true
 ---
 
 # ASSIGNMENT 1: GEORGIA HOUSE PRICE
@@ -19,7 +22,7 @@ We start by loading essential libraries, importing the data, and defining functi
 
 ```{r}
 # Installing dependencies
-install.packages("lubridate")
+#install.packages("lubridate")
 ```
 
 ```{r include = FALSE}
@@ -1886,7 +1889,7 @@ The influence plot shows most cases with low leverage; a small set exhibit eleva
 
 
 ```{r}
-influential <- influencePlot(m4_2,pch=19,id=list(method="noteworthy",n=3))
+influential <- influencePlot(m4_2,pch=19,id=list(method="noteworthy",n=3)) # we see NaN in Cook's D value because there are some influential values with hat value 1.
 rownames(influential)
 df_used <- model.frame(m4_2)   
 idx  <- as.integer(match(rownames(influential), rownames(df_used)))
@@ -1899,6 +1902,7 @@ m4_3= lm(log(price) ~ log(livingArea) *(   yearBuilt + county_grp +
     garageSpaces + parking + levels_mapped + latitude.scaled , data = georgia_clean)
 vif(m4_3, type = "predictor")
 summary(m4_3)$r.squared
+influencePlot(m4_3,pch=19,id=list(method="noteworthy",n=3)) # After remove these influential values we can see upper bound is 0.0159
 ```
 
 
@@ -1917,7 +1921,7 @@ Observed vs. predicted log(price) aligns closely with the 45° line, indicating 
 
 Marginal plots indicate largely linear effects for log(livingArea) and yearBuilt, with a clearer hump for latitude.scaled. Overall fit is adequate.
 
-
+In the model, price increases with living area (elasticity ≈ 0.386) and build year (~+1.86% per year), shows large amenity effects (garage ~+83%, spa ~+184%, pool ~−75%), small penalties for “many/excessive” bedrooms with small premiums for more bathrooms, and notable geography effects (several counties negative, many cities positive)
 
 ```{r}
 # The best model we obtained
@@ -1943,13 +1947,10 @@ plot(Effect(c("livingArea", "pool"), best_model), multiline=TRUE, ci.style="bars
 plot(Effect(c("livingArea", "hasGarage"), best_model), multiline=TRUE, ci.style="bars")
 plot(Effect(c("livingArea", "homeType"), best_model), multiline=TRUE, ci.style="bars")
 
-# + 
 marginalModelPlots(best_model, id=list(n=5)) # Whether the model fits the data
 # The lines should be as close as possible
+summary(m4_3)
 ```
 
-```{r}
-
-```
 
 
