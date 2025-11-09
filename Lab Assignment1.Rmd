@@ -53,7 +53,7 @@ library(effects)
 georgia <- read.csv("RealEstate_Georgia.csv")
 ```
 
-The dataset contains 6168 housing ads from different cities in different counties of the Georgia state, there are posts from 2014 to 2021 but majority of data are for 2021. For a fair analysis, the houses that are posted in 2021 are taken into account.
+The dataset contains 6168 housing ads from different cities in different counties of the Georgia state, there are posts from 2020 to 2021 but majority of data are for 2021. For a fair analysis, the houses that are posted in 2021 are taken into account.
 
 ```{r}
 # Get the dimension of the dataset
@@ -1939,8 +1939,6 @@ In the model, price increases with living area (elasticity ≈ 0.386) and build 
 
 ```{r}
 # The best model we obtained
-
-
 best_model <- m4_3
 
 # Validation of the best model
