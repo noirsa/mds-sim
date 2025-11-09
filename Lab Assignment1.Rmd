@@ -18,7 +18,7 @@ rm(list=ls()) # Clear the environment
 set.seed(123) # Set a seed to reproduce outcomes
 ```
 
-We start by loading essential libraries, importing the data, and defining functions to simplify repetitive operations.
+We start by loading essential libraries and importing the data.
 
 ```{r}
 # Installing dependencies
@@ -1612,28 +1612,42 @@ AIC(m1_0t) # 5160.026
 ```
 
 ```{r}
-# Influential observations analysis:
-llres <- which(abs(rstudent(m1_1))>3); llres
-# rstudent residuals are a type of residuals that follow a t-student distribution
-# In a t-student distribution, the probability of value to be higher than 3 is very small.
-georgia_clean[llres,] # these are the influential observations found using llres
+# We have seen 4 methods for detecting infueltial observations:
 
-# A priori influential observations:
-# Check which observations have a leverage higher than 3*p/n
-llhat <- which(hatvalues(m1_1)>3*length(coef(m1_1))/nrow(df)); llhat
-# No observations have a leverage higher than 3*p/n
+# Identify observations with large studentized residuals (> 3), 
+# which may indicate outliers in terms of the response variable.
+llres <- which(abs(rstudent(m1_1)) > 3); length(llres)
+# Identify observations with high leverage values, those that have 
+# an unusually strong influence on the fitted values. 
+# The threshold 3*p/n (where p = number of coefficients) is a common rule of thumb.
+llhat <- which(hatvalues(m1_1) > 3 * length(coef(m1_1)) / nrow(georgia_clean)); length(llhat)
+# Plot Cook’s distance to visually identify influential points. 
+# The Boxplot function highlights observations with unusually high influence.
+llcoo <- Boxplot(cooks.distance(m1_1), id = list(n=10, labels = seq(nrow(georgia_clean)))); length(llcoo)
+# Identify observations with Cook’s distance greater than 4/(n - p), 
+# which is another rule of thumb to flag influential cases 
+# that strongly affect the regression coefficients.
+llCH <- which(cooks.distance(m1_1) > 4 / (nrow(georgia_clean) - length(coef(m1_1)))); length(llCH)
+# Combine all influential observation indices (row positions)
+influential_ids <- unique(c(llres, llhat, llcoo, llCH))
+
+# But we opted for finding influential observations using the ids returned by incluencePlot
+# function, since it retuns only the most extreme ones, instead of finding them in a 
+# systematic way.
 
 # Check influential observations and remove them from the dataset
-llcoo <- Boxplot(cooks.distance(m1_1), id=list(n=10,labels=row.names(georgia_clean)))
-influencePlot(m1_1) # the ids of influential observations also appear in llcoo
-ll <- which(row.names(georgia_clean) %in% llcoo); ll # find row ids of them
-georgia_clean <- georgia_clean[-ll,] # remove them from the dataset
+influential <- influencePlot(m1_1, pch=19,id=list(method="noteworthy",n=3))
+df_used <- model.frame(m1_1)   
+idx  <- as.integer(match(rownames(influential), rownames(df_used)))
+# Check if all visually flagged influential points are also in the combined list
+all(idx %in% influential_ids)
+# Remove them from the dataset
+georgia_clean <- georgia_clean[-idx,]
 ```
 
 ```{r}
 # Let's create another model based on the cleaned dataset
 m1_2 <- lm(log(price) ~ log(livingArea) + yearBuilt + poly(latitude.scaled,2), data = georgia_clean)
-
 ```
 
 Previously we created a discretized variable from the quartiles of the numeric variable yearBuilt and now we want to check whether it is better to add this variable as a numeric or discretized variable.
@@ -1874,7 +1888,7 @@ summary(m4_1)$r.squared
 # Let's also check is there is multicollinearity presence in the  best model
 vif(m4_1, type = "predictor")
 
-# after stepwise selection we find 2 innecesary interaction (with bedrooms and bathrooms)
+# After stepwise selection we find 2 innecesary interaction (with bedrooms and bathrooms)
 m4_2= lm(log(price) ~ log(livingArea) *(   yearBuilt + county_grp + 
       hasGarage + spa + pool + homeType)+ bedrooms + bathrooms + city_grp + 
     garageSpaces + parking + levels_mapped + latitude.scaled , data = georgia_clean)
@@ -1883,26 +1897,26 @@ vif(m4_2, type = "predictor")
 summary(m4_2)$r.squared
 ```
 
-Before validate model we check influential value
-The influence plot shows most cases with low leverage; a small set exhibit elevated Cook’s D ( 582,583,1141,1921,2657,3502,3907,4471 ). we remove the flagged cases and refit the model on the cleaned sample.
-
-
+Before validating the model, we need to check the influential values again to ensure that any remaining influence on the model is minimized. The influence plot below shows most cases with low leverage. Then, we remove the flagged cases and refit the model on the cleaned sample.
 
 ```{r}
-influential <- influencePlot(m4_2,pch=19,id=list(method="noteworthy",n=3)) # we see NaN in Cook's D value because there are some influential values with hat value 1.
+# Checking influential values using influencePlot
+influential <- influencePlot(m4_2,pch=19,id=list(method="noteworthy",n=3))
+# we see NaN in Cook's D value because there are some influential values with hat value 1.
 rownames(influential)
 df_used <- model.frame(m4_2)   
 idx  <- as.integer(match(rownames(influential), rownames(df_used)))
 df_used[idx,]
 df_influential<-georgia_clean[idx,]
-georgia_clean <- georgia_clean[-c(idx),]
+georgia_clean <- georgia_clean[-idx,]
 
 m4_3= lm(log(price) ~ log(livingArea) *(   yearBuilt + county_grp + 
       hasGarage + spa + pool + homeType)+ bedrooms + bathrooms + city_grp + 
     garageSpaces + parking + levels_mapped + latitude.scaled , data = georgia_clean)
 vif(m4_3, type = "predictor")
 summary(m4_3)$r.squared
-influencePlot(m4_3,pch=19,id=list(method="noteworthy",n=3)) # After remove these influential values we can see upper bound is 0.0159
+influencePlot(m4_3,pch=19,id=list(method="noteworthy",n=3))
+# After removing these influential values we can see that the upper bound is 0.0159
 ```
 
 
