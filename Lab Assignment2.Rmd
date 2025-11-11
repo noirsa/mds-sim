@@ -425,5 +425,86 @@ summary(aug_train_clean$f.cdi)
 
 ```
 
+We replace all empty strings with NA to standardize missing values and convert all categorical variables to factors.
+```{r}
+# replace all empty strings with NA
+is_char <- sapply(aug_train_clean, is.character)
+aug_train_clean[is_char] <- lapply(aug_train_clean[is_char], function(x) ifelse(x == "", NA, x))
+# convert all categorical variables to factors.
+aug_train_clean[is_char] <- lapply(aug_train_clean[is_char],  function(x) factor(x))
+#check result
+summary(aug_train_clean[is_char])
+# Also convert target to factor
+aug_train_clean$target <- factor(aug_train_clean$target,labels= c("looking-for-job-no","looking-for-job-yes") )
+summary(aug_train_clean$target)
+```
 
+
+Based on the summary statistics of aug_train_clean (N = 5,000), the dataset is broadly coherent and aligns with expectations for an employment setting. The city_development_index spans 0.448–0.949 with quartiles at 0.738/0.899/0.920, indicating a concentration toward higher development levels; the derived four-level CDI(city_development_index) factor shows Med-High as the largest bucket. City frequencies are head-heavy (a handful of cities account for most rows) with a long tail, which is typical for geographically diverse samples.
+
+Demographics and education look plausible: most candidates are recorded as Graduate or Masters, with small shares at High School, Primary School and PhD, and STEM dominates among declared majors. University enrollment is primarily “no_enrollment,” consistent with a workforce-oriented sample. Work history is reasonable: a majority report relevant experience, and job-change recency peaks at 1 year, with smaller shares at 2–4 years and >4 years. Training hours exhibit a right-skew (median ≈47, upper tail to 336), which fits the idea that some candidates undergo intensive upskilling.
+
+Data quality is acceptable but not perfect. Several fields have notable missingness (e.g., gender, company_size, company_type, major_discipline), and cities include many low-frequency levels. Logical relationships are generally consistent (e.g., CDI distribution matches the binned factor; education and major categories align with expectations), and there are no obvious rule violations in the summary. The target is imbalanced (≈25% “yes”), suggesting attention to class weighting, threshold tuning, or resampling in modeling. Overall, the data supports the working view that human capital signals (education, experience, training) and contextual attributes (city and CDI) are informative for the outcome, while remaining anomalies are likely sparse outliers or missing-value artifacts rather than systemic issues.
+```{r}
+summary(aug_train_clean)
+library(naniar); library(ggplot2)
+
+naniar::vis_miss(aug_train_clean) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12)
+  )
+```
+
+
+
+## 3. Data quality reports
+
+**Variables**
+
+Up to this points, all variables in the dataset have been explored. In terms of missingness, some of the variables have exaggerated values or error values, those could be considered as missing values. If we rank the numeric variables in terms of number of outliers, the following list is obtained, starting with the most outliers: training_hours(60 extreme outliers) and no extreme outliers detect in CDI (only 3 mild outliers).
+
+We mark outliers for tracking and defer any treatment until before modelling.
+```{r}
+aug_train_clean$univ_outl_count <- 0
+
+# Calculate outliers
+out <- calculate_outliers(aug_train_clean$training_hours)
+# Update the column univ_outl_count
+aug_train_clean[out$extreme_indexes, "univ_outl_count"] = aug_train_clean[out$extreme_indexes, "univ_outl_count"] + 1
+```
+
+**Data Imputation**
+
+Here we will use imputeMCA for categorical variables.
+
+
+
+```{r}
+res.mice <- mice(aug_train_clean[3:13])
+df_imp <- complete(res.mice)
+aug_train_clean[3:13] <- df_imp
+```
+
+**Multivariate Analisis**
+
+Moutlier is applied on the numerical variables to find multivariate outliers.
+There are 177 multivariable outliers
+```{r}
+# Use Moutlier that applies Mahalanobis distances to detect multivariate outliers
+res.out = Moutlier(aug_train_clean[,c(2,12)] ,quantile = 0.975,plot=F) # Condidence level of 97.5%
+plot(res.out$md,res.out$rd)
+abline(h=res.out$cutoff, col="red", lty = 2)
+abline(v=res.out$cutoff, col="red", lty = 2)
+ll <- (which((res.out$md > res.out$cutoff)&(res.out$rd > res.out$cutoff))); length(ll)
+aug_train_clean$mvout <- "mvout_no"
+aug_train_clean$mvout[ll] <- "mvout_yes"
+aug_train_clean$mvout <- factor(aug_train_clean$mvout)
+res.cat <- catdes(aug_train_clean[,c(2:14,16)],14)
+res.cat$category
+res.cat$quanti.var
+res.cat$quanti
+summary(aug_train_clean[ll,])
+```
+```
 
