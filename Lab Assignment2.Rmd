@@ -1,12 +1,12 @@
 ---
 title: "Lab_Assignment_2"
-author: "zheshuo and geming"
+author: "Zheshuo and Geming"
 date: "2025-11-10"
 output: pdf_document
 ---
 
 
-# ASSIGNMENT 2: HR Analytics- Job 
+# ASSIGNMENT 2: HR Analytics - Job Change of Data Scientists 
 
 ## 0. Before Starting
 
@@ -49,47 +49,87 @@ library(effects)
 ```{r}
 # Importing the main data of the assignment
 aug <- read.csv("aug_train.csv")
-
 ```
 
-
-The dataset contains 19158 observations about differents employees, we split it into two, train (5000 observations) set and test set(14158 observations)
-```{r}
-# split dataset
-ll <- sample(1:nrow(aug), size = 5000, replace = FALSE)
-aug_train <- aug[ll,]
-aug_test <- aug[-ll,]
-# Get the dimension of the dataset
-dim(aug) # 19158 obs + 14 variables
-dim(aug_train) # 5000 obs + 14 variables
-dim(aug_test) # 14158 obs + 14 variables
-```
+The dataset contains 19158 observations about different employees. Each row has 14 attributes/variables containing information related to demographics, education and experience of the employee.
 
 ```{r}
 # Show the name of columns
-names(aug_train)
+names(aug)
 ```
-
 
 ```{r}
 # Check the structure of the dataset
-str(aug_train)
+str(aug)
 ```
+
+```{r}
+# Here we convert the categorical variables into factors
+aug$city <- factor(aug$city)
+aug$gender <- factor(aug$gender)
+aug$relevent_experience <- factor(aug$relevent_experience)
+aug$enrolled_university <- factor(aug$enrolled_university)
+aug$education_level <- factor(aug$education_level)
+aug$major_discipline <- factor(aug$major_discipline)
+aug$experience <- factor(aug$experience)
+aug$company_size <- factor(aug$company_size)
+aug$company_type <- factor(aug$company_type)
+aug$last_new_job <- factor(aug$last_new_job)
+```
+
+
 ```{r}
 # Use summary function to get a fast understanding of the dataset
-summary(aug_train)
+summary(aug)
 ```
-## 1. Explanatory Data Analysis
+
+```{r}
+# Print the first 10 observations in the data
+head(aug, 10)
+```
 
 
+## 1. Data Preparation
+
+### 1.1. Univariate Descriptive Analysis
+
+First of all, we can create a discretization version of variable for the the numerical variables city_development_index, training_hours and the target binary variable target. This can be done using the following cell. Moreover, the dataset has no apparent missing values (NAs), but we cannot discard the posibility of having them (missing values) as outliers in the dataset.
+
+```{r}
+# Creating the polytomic factors by city_development_index and training_hours quantiles
+get_polytomic_factors <- function(x, variable, labels){
+  # Compute quartile cut points
+  qs <- quantile(variable, probs = c(0, 0.25, 0.5, 0.75, 1))
+  
+  # Derive a name for the new column (e.g. "f.city" if variable was aug$city)
+  var_name <- deparse(substitute(variable))
+  colname <- paste0("f.", substring(var_name, 5))
+  
+  # Create the factor column
+  x[[colname]] <- cut(variable,
+                      breaks = qs,
+                      include.lowest = TRUE,
+                      labels = labels)
+  return(x)
+}
+
+aug <- get_polytomic_factors(aug, aug$city_development_index, labels = c("Low",
+                                                                  "Med-Low",
+                                                                  "Med-High",
+                                                                  "High"))
+aug <- get_polytomic_factors(aug, aug$training_hours, labels = c("Q1", "Q2", "Q3", "Q4"))
+aug$target <- factor(aug$target, labels = c("NO-Job-Change", "YES-Job-Change"))
+
+```
+
+In the next cell we implement a function that calculates the univariate outliers of a given numeric variable in the dataframe object.
 
 ```{r}
 # The function we need for EDA processes
 # Use given Q1 & Q3 to compute indexes of outliers
-calculate_outliers <- function(x) {
+calculate_outliers <- function(x, plot_yes = TRUE) {
   # Check for regular outliers
   col_name <- deparse(substitute(x))
-  Boxplot(x, main = "Boxplot", ylab = col_name)
   outliers <- boxplot.stats(x)$out
 
   # Compute quartiles and IQR
@@ -111,8 +151,11 @@ calculate_outliers <- function(x) {
   num_mild <- length(mild_idx)
   num_extreme <- length(extreme_idx)
 
-  abline(h = c(lower_mild, upper_mild), col = "blue", lwd = 2)
-  abline(h = c(lower_extreme, upper_extreme), col = "red", lwd = 2)
+  if (plot_yes) {
+    Boxplot(x, main = "Boxplot", ylab = col_name)
+    abline(h = c(lower_mild, upper_mild), col = "blue", lwd = 2)
+    abline(h = c(lower_extreme, upper_extreme), col = "red", lwd = 2)
+  }
 
   # Return the results as a list
   return(list(
@@ -122,389 +165,624 @@ calculate_outliers <- function(x) {
     extreme_indexes = extreme_idx
   ))
 }
+
 ```
-Variable enrollee_id is a numerical variable with no missing values.
-A quick inspection reveals that it serves as a unique identifier for each observation, since the number of unique values equals the total number of rows.
-Therefore, this variable does not contain meaningful numerical information for statistical analysis.
-Normality and outlier tests were not performed, as the variable is an ID rather than a continuous numeric feature. It contains no missing values thus imputation is not needed. This variable does not contain any outliers.
-Interestingly, the maximum value (33377) in the data does not match the number of columns (5000), maybe these ids belong to the observations of the original dataset where rental houses from other states are also stored.
 
 **Variable 1: enrollee_id**
+
+Variable enrollee_id is a numerical variable with no missing values thus imputation is not needed. A quick inspection reveals that it serves as a unique identifier for each observation, since the number of unique values equals the total number of rows. Therefore, this variable does not contain meaningful numerical information for statistical analysis.
+
+Normality and outlier tests were not performed, as the variable is an ID rather than a continuous numeric feature. Interestingly, the maximum value (33380) in the data does not match the number of columns (19158), which might mean that the dataset we have here is a subset of the original one. The variable enrollee_id ranges from 1 to 33380.
+
 ```{r}
 # Summary of the column
-summary(aug_train$enrollee_id)
-# Any missing values
-sum(is.na(aug_train$enrollee_id))
-# First five elements
-aug_train$enrollee_id[1:5]
+summary(aug$enrollee_id)
+# Any missing values?
+sum(is.na(aug$enrollee_id))
 # Number of unique values
-unique_counts<-length(unique(aug_train$enrollee_id))
+unique_counts <- length(unique(aug$enrollee_id))
 # Verify if all values are unique
-unique_counts == nrow(aug_train)
+unique_counts == nrow(aug)
 
 ```
+
 **Variable 2: city**
-The variable city is a categorical variable indicating the id of the city where the employees are located in.
-There are no missing data in the data and it has 115 unique values in this column, but other maybe refer to missing data.
-The most frequent city that appears in this data is city_103, followed by city_21, city_16 , city_114  and city_160 
+
+The variable city is a categorical variable indicating the id of the city where the employees are located in. There are no missing data in the data and it has 123 unique values in this column. The most frequent city is city_103 with 4355 appearances and the lowest are city_127, city_133, city_167 and city_59 with 10 appearances.
 
 ```{r}
+# Number of levels in the variable
+length(levels(aug$city))
 # Summary of the column
-summary(factor(aug_train$city))
-sum(is.na(aug_train$city))
-aug_train$city[1:5]
-
-length(unique(aug_train$city))
-plot(factor(aug_train$city))
-sort(table(aug_train$city), decreasing = TRUE)[1:5]
+sort(summary(aug$city))
+# Are there missing values?
+sum(is.na(aug$city)) # No missing values
 
 ```
 
 **Variable 3: city_development_index**
-The variable price is a numerical variable indicating the development index of city. It ranges from 0.4480 to 0.9490.
-This variable has no missing values and there are 89 unique values.
-Based on histogram and Shapiro test we can consider it isn't normal distribution.
-Moreover, this variable doesn't have any extreme outlier but it have 3 mild outliers.
-We verified the consistency of city_development_index, no inconsistencies were detected.
+
+The variable city_development_index is a numerical variable indicating the development index of city. It ranges from 0.4480 to 0.9490. This variable has no missing values and there are 93 unique values. Based on histogram and Shapiro test we can consider it isn't normally distributed. Moreover, this variable doesn't have any extreme outlier but it has 17 mild outliers. In addition, looking at the barplot created using the discretized variable, we can say that the first two groups have similar number of observations. While the third group has the largest number of observations, the fourth group has the lowest.
+
 ```{r}
 # Summary of the column
-summary((aug_train$city_development_index))
-# Any missing values
-sum(is.na(aug_train$city_development_index))
-# First five elements
-aug_train$city_development_index[1:5]
+summary((aug$city_development_index))
+# Any missing values?
+sum(is.na(aug$city_development_index))
 # Number of unique values
-length(unique(aug_train$city_development_index))
-hist(aug_train$city_development_index, breaks = 20, freq = F)
-curve(dnorm(x, mean(aug_train$city_development_index), sd(aug$city_development_index)), add = T)
+length(unique(aug$city_development_index))
 
+# Is it normally distributed?
+hist(aug$city_development_index, breaks = 20, freq = F)
+curve(dnorm(x, mean(aug$city_development_index), sd(aug$city_development_index)), add = T)
 # Shapiro test only accepts sample sizes between 3 and 5000
-shapiro.test(aug_train$city_development_index)
+shapiro.test(aug$city_development_index[sample(1:nrow(aug), replace=FALSE, size=5000)])
 
 # Detect outlier
-out <- calculate_outliers(aug_train$city_development_index)
-
+out <- calculate_outliers(aug$city_development_index)
 # Print number of extreme outliers
 out$num_extreme
 # Print number of mild outliers
 out$num_mild
 
-ok <- aug_train %>%
-  group_by(city) %>%
-  summarise(n = n_distinct(city_development_index, na.rm = TRUE), .groups = "drop") %>%
-  summarise(all_unique = all(n <= 1)) %>%
-  pull(all_unique)
-ok
+# Print the Barplot of the discreatized version of the variable
+barplot(table(aug$f.city_development_index))
 ```
 **Variable 4: gender**
-The  variable gender is a categorical variable with 4 levels that indicates the gender of employee.
-There are no explicit Na's, but the empty string "" appears to encode missing values.
-Counts are: Male 3471; Female 318; Other 50; and "" 1161.
+
+The variable gender is a categorical variable with 4 levels that indicates the gender of employee. There are no explicit NA's, but the empty string "" appears to encode missing values. This variable is highly imbalanced, the number of male employees is 13221, whereas the numbers of female and other employees are 1238 and 191 respectively. By the way, the number of missing values defined by the empty string "" is 4508.
+
 ```{r}
 # Summary of the column
-summary(factor(aug_train$gender))
-# Any missing values
-sum(is.na(aug_train$gender))
-# First five elements
-aug_train$gender[1:5]
+sort(summary(factor(aug$gender)))
+# Any missing values?
+sum(is.na(aug$gender))
 # Number of unique values
-length(unique(aug_train$gender))
-plot(factor(aug_train$gender))
-
+length(unique(aug$gender))
+# Plot the variable
+plot(aug$gender)
 
 ```
 **Variable 5: relevent_experience**
-The  variable relevent_experience is a categorical variable with 2 levels that indicates the relevant job experience of employee.
-This variable has no missing values.
-Counts are: Has relevent experience 3551;  No relevent experience  1449.
+
+The variable relevent_experience is a categorical variable with 2 levels that indicates the relevant job experience of employee. This variable has no missing values. There are 13792 employees with relevant experience and 5366 employees with no relevant experience. The number of the former is about twice and a bit more than the latter. The variable is imbalanced.
+
 ```{r}
 # Summary of the column
-summary(factor(aug_train$relevent_experience))
-# Any missing values
-sum(is.na(aug_train$relevent_experience))
-# First five elements
-aug_train$relevent_experience[1:5]
+sort(summary(aug$relevent_experience))
+# Any missing values?
+sum(is.na(aug$relevent_experience))
 # Number of unique values
-length(unique(aug_train$relevent_experience))
-plot(factor(aug_train$relevent_experience))
+length(unique(aug$relevent_experience))
+# Plot the variable
+plot(aug$relevent_experience)
 
 ```
 **Variable 6: enrolled_university**
 
-The  variable enrolled_university is a categorical variable with 4 levels that indicates the niversity enrollment status of employee.
-There are no explicit Na's, but the empty string "" appears to encode missing values.
-Counts are: Full time course 1005; no_enrollment 3582; Part time course 299; and "" 114.
+The variable enrolled_university is a categorical variable with 4 levels that indicates the university enrollment status of the employee. There are no explicit Na's, but the empty string "" appears to encode missing values. The number of missing values here is 386, the number of employees enrolled in a full time course is 3757, while those who did not enroll and enrolled in a part time course are 13817 and 1198 respectively. The variable is imbalanced, most of the employees did not enroll in any course.
+
 ```{r}
 # Summary of the column
-summary(factor(aug_train$enrolled_university))
-# Any missing values
-sum(is.na(aug_train$enrolled_university))
-# First five elements
-aug_train$enrolled_university[1:5]
+sort(summary(aug$enrolled_university))
+# Any missing values?
+sum(is.na(aug$enrolled_university))
 # Number of unique values
-length(unique(aug_train$enrolled_university))
-plot(factor(aug_train$enrolled_university))
+length(unique(aug$enrolled_university))
+# Plot the variable
+plot(aug$enrolled_university)
 
 ```
 **Variable 7: education_level**
 
-The  variable education_level is a categorical variable with 6 levels that indicates the highest education level of employee.
-There are no explicit Na's, but the empty string "" appears to encode missing values.
-Counts are: Graduate 3052; High School 504; Masters 1131; Phd 107; Primary School 85 and "" 121.
+The variable education_level is a categorical variable with 6 levels that indicates the highest education level of employee. There are no explicit Na's, but the empty string "" appears to encode missing values. The counts here are: Graduate 11598; High School 1017; Masters 4361; Phd 414; Primary School 308 and "" 460. The variable is imbalanced, most of the employees are graduates.
+
 ```{r}
 # Summary of the column
-summary(factor(aug_train$education_level))
-# Any missing values
-sum(is.na(aug_train$education_level))
-# First five elements
-aug_train$education_level[1:5]
+sort(summary(aug$education_level))
+# Any missing values?
+sum(is.na(aug$education_level))
 # Number of unique values
-length(unique(aug_train$education_level))
-plot(factor(aug_train$education_level))
+length(unique(aug$education_level))
+# Plot the variable
+plot(aug$education_level)
 ```
 **Variable 8: major_discipline**
-The  variable major_discipline is a categorical variable with 7 levels that indicates the major discipline of employee.
-There are no explicit Na's, but the empty string "" appears to encode missing values.
-Counts are: Arts 59;  Business Degree 87; Humanities 166; No Major 57; Other 93; STEM 3823 and "" 715.
-We identified a cross-variable inconsistency. Employees with ‘Primary school’ or ‘High school’ education exceed those labeled ‘No major’ + ‘Other’ in major_discipline. This gap likely reflects the larger volume of missing values in major_discipline.
+
+The variable major_discipline is a categorical variable with 7 levels that indicates the major discipline of employee. There are no explicit Na's, but the empty string "" appears to encode missing values. The counts here are: Arts 253;  Business Degree 327; Humanities 669; No Major 223; Other 381; STEM 14492 and "" 2813. We identified a cross-variable inconsistency. Employees with ‘Primary school’ or ‘High school’ education exceed those labeled ‘No major’ + ‘Other’ in major_discipline. This gap likely reflects the large volume of missing values in major_discipline. This variable is also imbalanced, most of the employees's major discipline is STEM.
+
 ```{r}
 # Summary of the column
-summary(factor(aug_train$major_discipline))
-# Any missing values
-sum(is.na(aug_train$major_discipline))
-# First five elements
-aug_train$major_discipline[1:5]
+sort(summary(aug$major_discipline))
+# Any missing values?
+sum(is.na(aug$major_discipline))
 # Number of unique values
-length(unique(aug_train$major_discipline))
-ll1 <- which(aug_train$education_level == "High School" | aug_train$education_level == "Primary School")
-length(ll1)
-ll2 <- which(aug_train$major_discipline == "No Major" | aug_train$major_discipline == "Other")
-length(ll2)
+length(unique(aug$major_discipline))
+
+# Cross-variable inconsistency detected
+ll1 <- which(aug$education_level == "High School" | aug$education_level == "Primary School"); length(ll1)
+ll2 <- which(aug$major_discipline == "No Major" | aug$major_discipline == "Other"); length(ll2)
 length(ll1) == length(ll2)
 
-plot(factor(aug_train$major_discipline))
+# Plot the variable
+plot(aug$major_discipline)
 ```
 **Variable 9: experience**
 
-The  variable major_discipline is a categorical variable with 23 levels that indicates the job experience of employee.
-There are no explicit Na's, but the empty string "" appears to encode missing values.
-Counts are: <1 134;  1 128; 2 306; 3 315; 4 378; 5 357; 6 302; 7 272; 8 223; 9 262; 10 255; 11 180; 12 134; 13 114; 14 172; 15 198; 16 135; 17 77; 18 77; 19 93; 20 37; >20 835 and "" 16.
+The variable major_discipline is a categorical variable with 23 levels that indicates the job experience of employee. There are no explicit Na's, but the empty string "" appears to encode missing values. The counts here are: <1 522;  1 549; 2 1127; 3 1354; 4 1403; 5 1430; 6 1216; 7 1028; 8 802; 9 980; 10 985; 11 664; 12 494; 13 399; 14 586; 15 686; 16 508; 17 342; 18 280; 19 304; 20 148; >20 3286 and "" 65. This variable is also imbalanced, most of the employees's job experience is greater than 20 years.
+
 ```{r}
 # Summary of the column
-summary(factor(aug_train$experience))
-# Any missing values
-sum(is.na(aug_train$experience))
-# First five elements
-aug_train$experience[1:5]
+sort(summary(aug$experience))
+# Any missing values?
+sum(is.na(aug$experience))
 # Number of unique values
-length(unique(aug_train$experience))
+length(unique(aug$experience))
 
-plot(factor(aug_train$experience))
+# Plot the variable
+plot(factor(aug$experience))
 ```
 **Variable 10: company_size**
-The  variable company_size is a categorical variable with 9 levels that indicates the size of company that employee belong to.
-There are no explicit Na's, but the empty string "" appears to encode missing values.
-Counts are: <10 337;  10/49 356;  50-99 800; 100-500 650; 500-999 229;  1000-4999 346; 5000-9999 169; 10000+ 495 and "" 1618.
+
+The variable company_size is a categorical variable with 9 levels that indicates the size of company that employee belong to. There are no explicit Na's, but the empty string "" appears to encode missing values. The counts here are: <10 1308;  10/49 1471;  50-99 3083; 100-500 2571; 500-999 877;  1000-4999 1328; 5000-9999 563; 10000+ 2019 and "" 5938 The data imbalance in this variable is less prevailing compared with other variables, since here the group with the highest number of observations is the empty string "".
+
 ```{r}
 # Summary of the column
-summary(factor(aug_train$company_size))
-# Any missing values
-sum(is.na(aug_train$company_size))
-# First five elements
-aug_train$company_size[1:5]
+sort(summary(aug$company_size))
+# Any missing values?
+sum(is.na(aug$company_size))
 # Number of unique values
-length(unique(aug_train$company_size))
+length(unique(aug$company_size))
 
-plot(factor(aug_train$company_size))
+# Plot the variable
+plot(factor(aug$company_size))
 ```
 **Variable 11: company_type**
-The  variable company_type is a categorical variable with 7 levels that indicates the type of company that employee belong to.
-There are no explicit Na's, but the empty string "" appears to encode missing values.
-Counts are: Other 31;  Public sector 232;  Early Stage Startup 148; Funded Startup 247; NGO 121;  Pvt Ltd 2565 and "" 1656.
+
+The variable company_type is a categorical variable with 7 levels that indicates the type of company that employee belong to. There are no explicit Na's, but the empty string "" appears to encode missing values. The counts here are: Other 121;  Public sector 955; Early Stage Startup 603; Funded Startup 1001; NGO 521; Pvt Ltd 9817 and "" 6140. The variable is highly imbalanced, not only do most of the employees belong to Pvt Ltd, but also there are a lot of missing data.
+
 ```{r}
 # Summary of the column
-summary(factor(aug_train$company_type))
-# Any missing values
-sum(is.na(aug_train$company_type))
-# First five elements
-aug_train$company_type[1:5]
+sort(summary(aug$company_type))
+# Any missing values?
+sum(is.na(aug$company_type))
 # Number of unique values
-length(unique(aug_train$company_type))
+length(unique(aug$company_type))
 
-plot(factor(aug_train$company_type))
+# Plot the variable
+plot(factor(aug$company_type))
 ```
 **Variable 12: last_new_job**
-The  variable last_new_job is a categorical variable with 7 levels that indicates difference in years between previous job and current job.
-There are no explicit Na's, but the empty string "" appears to encode missing values.
-Counts are: never 663;  1 2099;  2 743; 3 259; 4 260;  >4 865 and "" 111.
+
+The variable last_new_job is a categorical variable with 7 levels that indicates difference in years between previous job and current job. There are no explicit Na's, but the empty string "" appears to encode missing values. The counts here are: never 2452;  1 8040;  2 2900; 3 1024; 4 1029;  >4 3290 and "" 423. The prevailing value here is 1.
+
 ```{r}
 # Summary of the column
-summary(factor(aug_train$last_new_job))
-# Any missing values
-sum(is.na(aug_train$last_new_job))
-# First five elements
-aug_train$last_new_job[1:5]
+sort(summary(aug$last_new_job))
+# Any missing values?
+sum(is.na(aug$last_new_job))
 # Number of unique values
-length(unique(aug_train$last_new_job))
+length(unique(aug$last_new_job))
 
-plot(factor(aug_train$last_new_job))
+# Plot the variable
+plot(aug$last_new_job)
 ```
 
 **Variable 13: training_hours**
-The variable price is a numerical variable indicating the training hours of employee. It ranges from 1 to 336
-This variable has no missing values and there are 239 unique values.
-Based on histogram and Shapiro test we can consider it isn't normal distribution.
-Moreover, this variable have 60 extreme outlier and 171 mild outliers.
+
+The variable price is a numerical variable indicating the training hours of employee. It ranges from 1 to 336. This variable has no missing values and there are 241 unique values. Based on histogram and Shapiro test we can consider it isn't normally distributed. Moreover, this variable have 275 extreme outlier and 984 mild outliers. In addition, looking at the barplot created using the discretized variable, we can say that all the groups have similar number of observations.
+
 ```{r}
 # Summary of the column
-summary((aug_train$training_hours))
-# Any missing values
-sum(is.na(aug_train$training_hours))
-# First five elements
-aug_train$training_hours[1:5]
+summary(aug$training_hours)
+# Any missing values?
+sum(is.na(aug$training_hours))
 # Number of unique values
-length(unique(aug_train$training_hours))
+length(unique(aug$training_hours))
 
-
-hist(aug_train$training_hours, breaks = 20, freq = F)
-curve(dnorm(x, mean(aug_train$training_hours), sd(aug_train$training_hours)), add = T)
-
+# Is it normally distributed?
+hist(aug$training_hours, breaks = 20, freq = F)
+curve(dnorm(x, mean(aug$training_hours), sd(aug$training_hours)), add = T)
 # Shapiro test only accepts sample sizes between 3 and 5000
-shapiro.test(aug_train$training_hours)
+shapiro.test(aug$training_hours[sample(1:nrow(aug), replace=FALSE, size=5000)])
 
 # Detect outlier
-out <- calculate_outliers(aug_train$training_hours)
+out <- calculate_outliers(aug$training_hours)
 
 # Print number of extreme outliers
 out$num_extreme
 # Print number of mild outliers
 out$num_mild
+
+# Print the Barplot of the discreatized version of the variable
+barplot(table(aug$f.training_hours))
 ```
 
+**Variable 14: target**
 
-The  variable target is a categorical variable with 2 levels that indicates job-change intent.
-There are no missing values.
-Counts are: 0 3732 and 1 1268
+The variable target is a categorical (binary) variable with 2 levels that indicates job-change intent. There are no missing values and the counts here are: YES-Job-Change 4777 and NO-Job-Change 14381. This variable is highly imbalanced, there are around 10000 employees having no job-change intent more than those who have.
+
 ```{r}
 # Summary of the column
-summary(factor(aug_train$target))
-# Any missing values
-sum(is.na(aug_train$target))
-# First five elements
-aug_train$target[1:5]
+sort(summary(aug$target))
+# Any missing values?
+sum(is.na(aug$target))
 # Number of unique values
-length(unique(aug_train$target))
+length(unique(aug$target))
 
-plot(factor(aug_train$target))
+# Plot the variable
+plot(aug$target)
 ```
-## 2. Data preparation
+### 1.2. Data Quality Report
 
-In this section we will prepare the data in order to facilitate the later analysis. In the previous section we found different problems of each variable, so here we are going to either apply different cleaning functions to the columns or just remove them.
+#### 1.2.1. Per Variable
+
+Up to this points, all variables in the dataset have been explored. In the following cell, we will analyze the number of missing values, the number of inconsistencies and the number of outliers. Then, we will sum these values up and sort the variables in descending order.
+
+Regarding the inconsistencies in the dataset, we assume that employees that did not enroll in any courses can neither be a graduate, a masters nor a phD as their highest level of education. Moreover, if the highest education level is Primary School, then they should have No Major in major_discipline variable.
 
 ```{r}
-# The following columns just don't provide any useful information
-cols_to_remove <- c(
-  "enrollee_id"
-)
+# Create an empty dataFrame
+aug_var <- data.frame(missing_values = rep(NA, ncol(aug)-2))
+aug_varnames <- setdiff(colnames(aug), c("f.city_development_index", "f.training_hours"))
+rownames(aug_var) <- aug_varnames
 
-aug_train_clean <- aug_train[,setdiff(names(aug_train),cols_to_remove)]
+# Count missing values
+mss_list <- sapply(aug[,aug_varnames], function(x) {
+  if (is.factor(x) || is.character(x)) {
+    sum(x == "")
+  } else {
+    0
+  }
+})
+# Store missing values in the variables
+aug_var$missing_values <- mss_list
+
+# Count inconsistencies
+err_list <- rep(0, length(aug_varnames))
+err_list[which(aug_varnames=="enrolled_university" | aug_varnames=="education_level")] <-
+        length(which(aug$enrolled_university == "no_enrollment" &
+                    (aug$education_level == "Graduate" |
+                     aug$education_level == "Masters" |
+                     aug$education_level == "Phd")))
+err_list[which(aug_varnames=="education_level")] <- err_list[which(aug_varnames=="education_level")] +
+        length(which(aug$education_level == "Primary School" &
+                     aug$major_discipline == "No Major"))
+err_list[which(aug_varnames=="major_discipline")] <-
+        length(which(aug$education_level == "Primary School" &
+                     aug$major_discipline == "No Major"))
+# Store erros in the variables
+aug_var$errors <- err_list
+
+# Count number of outliers
+severe_out_list <- sapply(aug[,aug_varnames], function(x) {
+  if (is.factor(x) || is.character(x)) {
+    return (0)
+  } else {
+    res.out <- calculate_outliers(x, plot_yes = FALSE)
+    return (res.out$num_extreme)
+  }
+})
+mild_out_list <- sapply(aug[,aug_varnames], function(x) {
+  if (is.factor(x) || is.character(x)) {
+    return (0)
+  } else {
+    res.out <- calculate_outliers(x, plot_yes = FALSE)
+    return (res.out$num_mild)
+  }
+})
+# Store missing values in the variables
+aug_var$severe_outliers <- severe_out_list
+aug_var$mild_outliers <- mild_out_list
+aug_var$total_outliers <- severe_out_list + mild_out_list
+
+# Summing up columns
+aug_var$sum_cols <- rowSums(aug_var)
+# Sort the dataFrame in descending order
+aug_var <- aug_var[order(aug_var$sum_cols, decreasing = TRUE), ]
+
+# Print the dataFrame
+aug_var
+```
+
+#### 1.2.2. Per Individual
+
+Now, we will do something similiar with observations in the dataset. In the following cells, we will analyze the number of missing values, the number of inconsistencies and the number of outliers. Then we will identify the individuals considered as multivariant outliers.
+
+```{r}
+# Create an empty dataFrame
+aug_ind <- data.frame(missing_values = rep(NA, nrow(aug)))
+
+# Count missing values
+mss_list <- apply(aug[row.names(aug_ind), ], MARGIN = 1, FUN = function(x) {
+  sum(x == "")
+})
+# Store missing values in the variables
+aug_ind$missing_values <- mss_list
+
+# Count inconsistencies
+# No inconsistencies found
+
+# Count number of outliers
+# Cannot compute outliers for individuals, since there are categorical values in each row
+
+# Check preliminary multivariant outliers for the dataset
+mout.res <- Moutlier(aug[,c(3,13)], plot = FALSE) # The missing data are not imputed yet
+llmout <- which(mout.res$md > mout.res$cutoff & mout.res$rd > mout.res$cutoff) # ids of mout
+# Store the information about multivariant outliers
+aug_ind$mvout <- 0
+aug_ind$mvout[llmout] <- 1
+
+# Summing up columns
+aug_ind$sum_cols <- rowSums(aug_ind)
+
+# Print the dataFrame
+aug_ind
+```
+
+Now, we want to study which variables are correlated with this final column of summed up missing values, errors and outliers. Since it is a numerical variable, we can use condes() from FactoMineR library to do the profiling. The numerical variables associated with sum_cols are training_hours and city_development_index, but their correlation with the variable is pretty low. On the other hand, the most correlated categorical variables with the variable sum_cols are those with a p-value equals 0 and a high number of R2. Just for mentioning, the top three most correlated categorical variables are company_size (0.628), company_type (0.62) and education_level (0.33).
+
+```{r}
+# Add the column to the original dataset
+aug$sum_cols <- aug_ind$sum_cols
+
+# Profiling using condes
+res.con <- condes(aug[2:ncol(aug)], 16) # We skip the first column of ids
+
+# Correlated numerical variables
+res.con$quanti
+
+# Correlated categorical variables
+res.con$quali
+
+# The effect of the categories is not interested here, since there are still imputed data 
+#res.con$category
+```
+
+In addition, we compute for every group of individuals the mean of missing values and then, rank the groups according to the computed mean.
+
+```{r}
+# Group means of f.city_development_index
+sort(tapply(aug$sum_cols, aug$f.city_development_index, mean))
+print("===========================================")
+# Group means of gender
+sort(tapply(aug$sum_cols, aug$gender, mean))
+print("===========================================")
+# Group means of relevent_experience
+sort(tapply(aug$sum_cols, aug$relevent_experience, mean))
+print("===========================================")
+# Group means of enrolled_university
+sort(tapply(aug$sum_cols, aug$enrolled_university, mean))
+print("===========================================")
+# Group means of education_level
+sort(tapply(aug$sum_cols, aug$education_level, mean))
+print("===========================================")
+# Group means of major_discipline
+sort(tapply(aug$sum_cols, aug$major_discipline, mean))
+print("===========================================")
+# Group means of f.training_hours
+sort(tapply(aug$sum_cols, aug$f.training_hours, mean))
+```
+
+```{r}
+# We remove this last column in the dataset, since we will not be working with it from now on
+aug$sum_cols <- NULL
+```
+
+
+### 1.3. Imputation
+
+### 1.3.1. Numeric Variables
+
+Firstly, we need to assign NAs to the severe outliers found in numerical variables. The only numerical variables we have in our dataset are city_development_index and training_hours. Since we only have two variables and the former one does not have severe outliers, we will impute both severe and mild outliers using imputePCA().
+
+Having a comparison of the quantiles of the imputed and unimputed numerical variables, we can state that the imputed values are correct, since the distributions of those two variables have not been greately altered.
+
+```{r}
+# Compute outliers
+out_cdi <- calculate_outliers(aug$city_development_index, plot_yes = FALSE);
+length(out_cdi$mild_indexes)
+length(out_cdi$extreme_indexes)
+out_th <- calculate_outliers(aug$training_hours, plot_yes = FALSE)
+length(out_th$mild_indexes)
+length(out_th$extreme_indexes)
+
+# Assigning NAs
+aug$city_development_index[out_cdi$mild_indexes] <- NA
+aug$training_hours[out_th$mild_indexes] <- NA
+
+# Imputation with imputePCA
+res.pca <- imputePCA(aug[, c(3, 13)], ncp = 1)
+
+# Validation
+summary(res.pca$completeObs)
+summary(aug[,c(3, 13)])
+
+# Retain the imputed values
+aug[,c(3, 13)] <- res.pca$completeObs
+```
+
+### 1.3.2. Factors
+
+Firstly, we need to assign NAs to the empty strings "" in all categorical variables. Then, we will apply imputeMCA to impute categorical variables.
+
+Having a comparison of the imputed and unimputed categorical variables, we can state that the imputed values are correct, since the frequencies of the categories in each of the variables do not seem to differ too much.
+
+```{r}
+# Assigning NAs
+aug$gender[which(aug$gender == "")] <- NA
+aug$enrolled_university[which(aug$enrolled_university == "")] <- NA
+aug$education_level[which(aug$education_level == "")] <- NA
+aug$major_discipline[which(aug$major_discipline == "")] <- NA
+aug$experience[which(aug$experience == "")] <- NA
+aug$company_size[which(aug$company_size == "")] <- NA
+aug$company_type[which(aug$company_type == "")] <- NA
+aug$last_new_job[which(aug$last_new_job == "")] <- NA
+
+# Imputation with imputePCA (~ 25 seconds)
+res.mca <- imputeMCA(aug[, c(2,4:12, 14)])
+
+# Validation
+summary(res.mca$completeObs)
+print("====================================")
+summary(aug[,c(2,4:12, 14)])
+
+# Retain the imputed values
+aug[,c(2,4:12, 14)] <- res.mca$completeObs
+```
+
+### 1.3.3. Removing Multivariate Outliers
+
+Here, we use Moutlier() again to find multivariate outliers in the dataset and remove them from the dataset, since they can possibly decrease the performance of our final model.
+
+```{r}
+# Check multivariant outliers for the dataset
+mout.res <- Moutlier(aug[,c(3,13)], plot = FALSE)
+llmout <- which(mout.res$md > mout.res$cutoff & mout.res$rd > mout.res$cutoff) # ids of mout
+length(llmout) # 484 multivariate outliers are found
+
+# Comparing the values of the multivariate outliers
+summary(aug[llmout,]) # Outliers
+print("====================================")
+summary(aug[-llmout,]) # No outliers
+
+# Remove the multivariate outliers
+aug <- aug[-llmout,]
+
+# Reseting row names
+row.names(aug) <- NULL
+```
+
+### 1.3.4. Final Data Cleaning Process
+
+In this section we will prepare the data a little bit more in order to facilitate the later analysis. In the Univariate Descriptive Analysis section we found different problems of each variable, so here we are going to either apply different cleaning functions to the columns or just remove them.
+
+```{r}
+# We remove the column enrollee_id which do no provide any useful information
+aug <- aug[,setdiff(names(aug),"enrollee_id")]
+
 # Check remaining columns
-names(aug_train_clean)
-```
-A four-level categorical variable was derived from city_development_index.
-```{r}
-
-aug_train_clean$f.cdi <- cut(aug_train_clean$city_development_index, breaks=quantile(aug_train_clean$city_development_index),include.lowest = T)
-summary(aug_train_clean$f.cdi)
-# rename levels
-levels(aug_train_clean$f.cdi) <- c("Low",
-                     "Med-Low",
-                     "Med-High",
-                     "High")
-summary(aug_train_clean$f.cdi)
-
+names(aug)
 ```
 
-We replace all empty strings with NA to standardize missing values and convert all categorical variables to factors.
+Then, we should check if there are any duplicated observations in the dataset. Since the column enrollee_id is removed, now we can check that. We cannot do it previously because the column enrollee_id has the same number of unique values as the number of rows in the dataset. For that purpose, we can use the function duplicated() which returns all rows that appear at least twice in the dataset. It seems that there are 120 duplicated observations in our current dataset.
+
 ```{r}
-# replace all empty strings with NA
-is_char <- sapply(aug_train_clean, is.character)
-aug_train_clean[is_char] <- lapply(aug_train_clean[is_char], function(x) ifelse(x == "", NA, x))
-# convert all categorical variables to factors.
-aug_train_clean[is_char] <- lapply(aug_train_clean[is_char],  function(x) factor(x))
-#check result
-summary(aug_train_clean[is_char])
-# Also convert target to factor
-aug_train_clean$target <- factor(aug_train_clean$target,labels= c("looking-for-job-no","looking-for-job-yes") )
-summary(aug_train_clean$target)
+# Find number of duplicated rows
+sum(duplicated(aug)) # 120
+# Find which observations are duplicated
+duples <- which(duplicated(aug)) # One of the duplicated rows in the one in the position 247
+
+# The function shows ids of rows that have already appeared before
+
+# Show the duplicated observations of the observation 247
+find_previous_duplicate <- function(df, row_id) {
+  target <- df[row_id,]
+  # Compare each row above row_id
+  above_rows <- 1:(row_id - 1)
+  for (i in above_rows) {
+    row_i <- df[i,]
+    # Compare element-wise, treating NA as equal
+    equal <- mapply(function(a,b) a == b, row_i, target)
+    if (all(equal)) return(i) # First match found
+  }
+  return(NA) # No previous match
+}
+previous_row_index <- find_previous_duplicate(aug, duples[1]) # Obs 247
+aug[c(duples[1], previous_row_index),]
+
+# Remove duplicated rows
+aug <- aug[-duples,]
+
+# Reseting row names
+row.names(aug) <- NULL
 ```
 
+The variables experience and company_size have too many levels, which will decrease the performance of the later modelling process. Therefore, we are going to group those levels into 4 groups at most.
 
-Based on the summary statistics of aug_train_clean (N = 5,000), the dataset is broadly coherent and aligns with expectations for an employment setting. The city_development_index spans 0.448–0.949 with quartiles at 0.738/0.899/0.920, indicating a concentration toward higher development levels; the derived four-level CDI(city_development_index) factor shows Med-High as the largest bucket. City frequencies are head-heavy (a handful of cities account for most rows) with a long tail, which is typical for geographically diverse samples.
-
-Demographics and education look plausible: most candidates are recorded as Graduate or Masters, with small shares at High School, Primary School and PhD, and STEM dominates among declared majors. University enrollment is primarily “no_enrollment,” consistent with a workforce-oriented sample. Work history is reasonable: a majority report relevant experience, and job-change recency peaks at 1 year, with smaller shares at 2–4 years and >4 years. Training hours exhibit a right-skew (median ≈47, upper tail to 336), which fits the idea that some candidates undergo intensive upskilling.
-
-Data quality is acceptable but not perfect. Several fields have notable missingness (e.g., gender, company_size, company_type, major_discipline), and cities include many low-frequency levels. Logical relationships are generally consistent (e.g., CDI distribution matches the binned factor; education and major categories align with expectations), and there are no obvious rule violations in the summary. The target is imbalanced (≈25% “yes”), suggesting attention to class weighting, threshold tuning, or resampling in modeling. Overall, the data supports the working view that human capital signals (education, experience, training) and contextual attributes (city and CDI) are informative for the outcome, while remaining anomalies are likely sparse outliers or missing-value artifacts rather than systemic issues.
 ```{r}
-summary(aug_train_clean)
-library(naniar); library(ggplot2)
+# Summary of experience
+summary(aug$experience)
 
-naniar::vis_miss(aug_train_clean) +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
-    axis.text.y = element_text(size = 12)
-  )
+# Grouping
+aug$f.experience[aug$experience %in% c("<1", "1", "2", "3", "4", "5")] <- "[<1,5]"
+aug$f.experience[aug$experience %in% c("6", "7", "8", "9", "10")] <- "[6,10]"
+aug$f.experience[aug$experience %in% c("11", "12", "13", "14", "15")] <- "[11,15]"
+aug$f.experience[aug$experience %in% c("16", "17", "18", "19", "20", ">20")] <- "[16,>20]"
+
+# Print
+aug$f.experience
 ```
 
-
-
-## 3. Data quality reports
-
-**Variables**
-
-Up to this points, all variables in the dataset have been explored. In terms of missingness, some of the variables have exaggerated values or error values, those could be considered as missing values. If we rank the numeric variables in terms of number of outliers, the following list is obtained, starting with the most outliers: training_hours(60 extreme outliers) and no extreme outliers detect in CDI (only 3 mild outliers).
-
-We mark outliers for tracking and defer any treatment until before modelling.
 ```{r}
-aug_train_clean$univ_outl_count <- 0
+# Summary of company_size
+summary(aug$company_size)
 
-# Calculate outliers
-out <- calculate_outliers(aug_train_clean$training_hours)
-# Update the column univ_outl_count
-aug_train_clean[out$extreme_indexes, "univ_outl_count"] = aug_train_clean[out$extreme_indexes, "univ_outl_count"] + 1
+# Small: <10, 10/49, 50-99
+aug$f.company_size[aug$company_size %in% c("<10", "10/49", "50-99")] <- "Small"
+# Medium: 100-500, 500-999
+aug$f.company_size[aug$company_size %in% c("100-500", "500-999")] <- "Medium"
+# Large: 1000-4999, 5000-9999
+aug$f.company_size[aug$company_size %in% c("1000-4999", "5000-9999")] <- "Large"
+# Very Large: 10000+
+aug$f.company_size[aug$company_size == "10000+"] <- "Very-Large"
+
+# Print
+aug$f.company_size
 ```
 
-**Data Imputation**
+### 1.3.5. Profiling on the Binary Target
 
-Here we will use imputeMCA for categorical variables.
+Our target variable is (binary) categorical, so we will use catdes() from FactoMineR library to do the profiling. The most correlated categorical variables with the target variable target are city, f.city_development_index, company_size, experience, f.experience, enrolled_university, f.company_size and relevent_experience (p.value < 1e-50). On the other hand, the most correlated numerical variables (the only ones we have) are city_development_index (Eta2 = 0.11) and training_hours (Eta2 ~ 0).
 
-
+According to the results in \$quanti, employees who have the intent of changing the job have the significant mean lower than the grand mean in the variables training_hours and city_development_index. Next, let's focus on the results given by \$category. The employees who have the intent of changing the job have low city_development_index and their current company's size is small. Their total experience in years is between less than a year and 5 years, so they do not have relevant experience, they were enrolled in a full time course at a university and their education level is a bachelor's. Based on this information, we can conclude that individuals seeking to change jobs are likely recent graduates with limited experience in the field.
 
 ```{r}
-res.mice <- mice(aug_train_clean[3:13])
-df_imp <- complete(res.mice)
-aug_train_clean[3:13] <- df_imp
-```
+# Applying catdes on target
+res.cat <- catdes(aug, num.var=13)
 
-**Multivariate Analisis**
+# Most significant categorical variables
+res.cat$test.chi2
 
-Moutlier is applied on the numerical variables to find multivariate outliers.
-There are 177 multivariable outliers
-```{r}
-# Use Moutlier that applies Mahalanobis distances to detect multivariate outliers
-res.out = Moutlier(aug_train_clean[,c(2,12)] ,quantile = 0.975,plot=F) # Condidence level of 97.5%
-plot(res.out$md,res.out$rd)
-abline(h=res.out$cutoff, col="red", lty = 2)
-abline(v=res.out$cutoff, col="red", lty = 2)
-ll <- (which((res.out$md > res.out$cutoff)&(res.out$rd > res.out$cutoff))); length(ll)
-aug_train_clean$mvout <- "mvout_no"
-aug_train_clean$mvout[ll] <- "mvout_yes"
-aug_train_clean$mvout <- factor(aug_train_clean$mvout)
-res.cat <- catdes(aug_train_clean[,c(2:14,16)],14)
-res.cat$category
+# Most significant numerical variables (the only two)
 res.cat$quanti.var
+
+# Description by the numerical variables
 res.cat$quanti
-summary(aug_train_clean[ll,])
-```
+
+# Description by the categorical variables
+res.cat$category
 ```
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-> We still don't know if it is really necessary to create trian/test sets. Therefore, we are not going to apply the following cell yet.
+
+Then, we split it into train and test sets. The test set will have 15% of the original dataset (2873), while the train set will have the remaining 85% (16285).
+
+```{r}
+# Split dataset
+ts <- sample(1:nrow(aug), size = 0.15 * nrow(aug), replace = FALSE)
+aug_test <- aug[ts,]
+aug_train <- aug[-ts,]
+
+# Get the dimension of the dataset
+dim(aug) # 19158 obs + 14 variables
+dim(aug_train) # 16285 obs + 14 variables
+dim(aug_test) # 2873 obs + 14 variables
+```
