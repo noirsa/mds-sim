@@ -710,6 +710,9 @@ aug$f.experience[aug$experience %in% c("6", "7", "8", "9", "10")] <- "[6,10]"
 aug$f.experience[aug$experience %in% c("11", "12", "13", "14", "15")] <- "[11,15]"
 aug$f.experience[aug$experience %in% c("16", "17", "18", "19", "20", ">20")] <- "[16,>20]"
 
+# To factor
+aug$f.experience <- factor(aug$f.experience)
+
 # Print
 aug$f.experience
 ```
@@ -727,11 +730,14 @@ aug$f.company_size[aug$company_size %in% c("1000-4999", "5000-9999")] <- "Large"
 # Very Large: 10000+
 aug$f.company_size[aug$company_size == "10000+"] <- "Very-Large"
 
+# To factor
+aug$f.company_size <- factor(aug$f.company_size)
+
 # Print
 aug$f.company_size
 ```
 
-### 1.3.5. Profiling on the Binary Target
+## 2. Profiling and Feature Selection
 
 Our target variable is (binary) categorical, so we will use catdes() from FactoMineR library to do the profiling. The most correlated categorical variables with the target variable target are city, f.city_development_index, company_size, experience, f.experience, enrolled_university, f.company_size and relevent_experience (p.value < 1e-50). On the other hand, the most correlated numerical variables (the only ones we have) are city_development_index (Eta2 = 0.11) and training_hours (Eta2 ~ 0).
 
@@ -754,24 +760,17 @@ res.cat$quanti
 res.cat$category
 ```
 
+In the posterior modelling, we will focus on the most significant variables identified during the profiling of the binary target. Both numerical variables and the discretized version of city_development_index are highly significant. However, since we only have two numerical variables in total, it makes more sense to keep city_development_index as a continuous variable and use it together with training_hours.
+
+The variable city is also highly significant, with a p-value essentially equal to 0. Even so, it includes far too many levels (119), which would make the interpretation of the models unnecessarily complicated, so we probably will not include it in the posterior analysis.
+
+On the other hand, all remaining categorical variables also appear to be strongly significant. In particular, f.experience stands out (and we prefer using f.experience instead of experience, since both have similar p-values but experience contains too many levels). The same argument applies to f.company_size. Other categorical variables that we consider for modelling include enrolled_university, relevent_experience, education_level, last_new_job and company_type, as they all show very low p-values and clear relevance for the target.
+
+## 3. Modeling Using Numeric Variables
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
--> We still don't know if it is really necessary to create trian/test sets. Therefore, we are not going to apply the following cell yet.
+---> We do the splits after analyzing the whole/original dataset (although in the real world scenarios we can only use the train set to analyze the distribution of the data)
 
 Then, we split it into train and test sets. The test set will have 15% of the original dataset (2873), while the train set will have the remaining 85% (16285).
 
@@ -786,3 +785,7 @@ dim(aug) # 19158 obs + 14 variables
 dim(aug_train) # 16285 obs + 14 variables
 dim(aug_test) # 2873 obs + 14 variables
 ```
+
+## 3.1. Residual Analysis: Unusual and Influent Data Filtering
+
+
