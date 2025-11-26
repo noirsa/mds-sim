@@ -113,6 +113,7 @@ get_polytomic_factors <- function(x, variable, labels){
   return(x)
 }
 
+# Get discretized numerical variables
 aug <- get_polytomic_factors(aug, aug$city_development_index, labels = c("Low",
                                                                   "Med-Low",
                                                                   "Med-High",
@@ -535,11 +536,11 @@ res.con$quanti
 # Correlated categorical variables
 res.con$quali
 
-# The effect of the categories is not interested here, since there are still imputed data 
+# The effect of the categories is not interested here, since there are still NAs  
 #res.con$category
 ```
 
-In addition, we compute for every group of individuals the mean of missing values and then, rank the groups according to the computed mean.
+In addition, we compute for every group of individuals the mean of missing values and then, rank the groups according to the computed mean. We observe that groups of empty string "" have the highest average number of missing values.
 
 ```{r}
 # Group means of f.city_development_index
@@ -569,14 +570,11 @@ sort(tapply(aug$sum_cols, aug$f.training_hours, mean))
 aug$sum_cols <- NULL
 ```
 
-
-### 1.3. Imputation
+### 1.3. Data Cleaning And Imputation
 
 ### 1.3.1. Numeric Variables
 
-Firstly, we need to assign NAs to the severe outliers found in numerical variables. The only numerical variables we have in our dataset are city_development_index and training_hours. Since we only have two variables and the former one does not have severe outliers, we will impute both severe and mild outliers using imputePCA().
-
-Having a comparison of the quantiles of the imputed and unimputed numerical variables, we can state that the imputed values are correct, since the distributions of those two variables have not been greately altered.
+The only numerical variables we have in our dataset are city_development_index and training_hours. Since we only have two variables and the former one does not have severe outliers, we will remove all the mild outliers found using city_development_index and all the severe outliers found using training_hours.
 
 ```{r}
 # Compute outliers
@@ -586,27 +584,38 @@ length(out_cdi$extreme_indexes)
 out_th <- calculate_outliers(aug$training_hours, plot_yes = FALSE)
 length(out_th$mild_indexes)
 length(out_th$extreme_indexes)
-
-# Assigning NAs
-aug$city_development_index[out_cdi$mild_indexes] <- NA
-aug$training_hours[out_th$mild_indexes] <- NA
-
-# Imputation with imputePCA
-res.pca <- imputePCA(aug[, c(3, 13)], ncp = 1)
-
-# Validation
-summary(res.pca$completeObs)
-summary(aug[,c(3, 13)])
-
-# Retain the imputed values
-aug[,c(3, 13)] <- res.pca$completeObs
 ```
+
+```{r}
+# Summary of the data before removing the outliers
+summary(aug)
+```
+
+```{r}
+# Indexes to remove
+remove_indexes <- unique(c(out_cdi$mild_indexes, out_th$extreme_indexes))
+length(remove_indexes)
+
+# Summary of the outliers to remove
+summary(aug[remove_indexes,])
+```
+
+```{r}
+# Removing outliers
+aug <- aug[-remove_indexes,]
+
+# Summary of the cleaned dataset
+summary(aug)
+
+# Resetting row names
+row.names(aug) <- NULL
+```
+
+Having printed the summaries of the outliers and the dataset without outliers, we can conclude that the outliers are essentially those observations with unusually low values of city development index and unusually high values of training hours.
 
 ### 1.3.2. Factors
 
-Firstly, we need to assign NAs to the empty strings "" in all categorical variables. Then, we will apply imputeMCA to impute categorical variables.
-
-Having a comparison of the imputed and unimputed categorical variables, we can state that the imputed values are correct, since the frequencies of the categories in each of the variables do not seem to differ too much.
+Firstly, we need to assign NAs to the empty strings "" in all categorical variables. Then, we will apply imputeMCA() to impute categorical variables.
 
 ```{r}
 # Assigning NAs
@@ -631,6 +640,8 @@ summary(aug[,c(2,4:12, 14)])
 aug[,c(2,4:12, 14)] <- res.mca$completeObs
 ```
 
+Having compared the imputed and unimputed categorical variables, we notice that in variables with a large number of NAs (thousands of empty strings), the imputation process tends to assign most of these NAs to the majority class. Only a small share ends up being imputed into the non-majority classes. This could be an error, or it might simply reflect the fact that the unnamed category genuinely belongs to the majority class. Either way, we will keep all the imputed values, as we need them to proceed with the rest of the assignment.
+
 ### 1.3.3. Removing Multivariate Outliers
 
 Here, we use Moutlier() again to find multivariate outliers in the dataset and remove them from the dataset, since they can possibly decrease the performance of our final model.
@@ -639,7 +650,7 @@ Here, we use Moutlier() again to find multivariate outliers in the dataset and r
 # Check multivariant outliers for the dataset
 mout.res <- Moutlier(aug[,c(3,13)], plot = FALSE)
 llmout <- which(mout.res$md > mout.res$cutoff & mout.res$rd > mout.res$cutoff) # ids of mout
-length(llmout) # 484 multivariate outliers are found
+length(llmout) # 687 multivariate outliers are found
 
 # Comparing the values of the multivariate outliers
 summary(aug[llmout,]) # Outliers
@@ -649,9 +660,11 @@ summary(aug[-llmout,]) # No outliers
 # Remove the multivariate outliers
 aug <- aug[-llmout,]
 
-# Reseting row names
+# Resetting row names
 row.names(aug) <- NULL
 ```
+
+The multivariate outliers we found form a much smaller subset compared to the full dataset, which is expected. The categorical variables keep roughly the same proportions, so the main differences show up in the two numerical variables. The outliers seem to have lower values for city development index, since removing them increases the minimum from 0.479 to 0.512 and also raises the median to 0.91. For training hours, the outliers appear to take very high values, as the first quartile in the outlier set is already 202, almost at the upper end of the cleaned dataset. Overall, the outliers identified are those with unusually low city development index and unusually high training hours, similar to what we observed in the section 1.3.1.
 
 ### 1.3.4. Final Data Cleaning Process
 
@@ -665,17 +678,17 @@ aug <- aug[,setdiff(names(aug),"enrollee_id")]
 names(aug)
 ```
 
-Then, we should check if there are any duplicated observations in the dataset. Since the column enrollee_id is removed, now we can check that. We cannot do it previously because the column enrollee_id has the same number of unique values as the number of rows in the dataset. For that purpose, we can use the function duplicated() which returns all rows that appear at least twice in the dataset. It seems that there are 120 duplicated observations in our current dataset.
+Then, we should check if there are any duplicated observations in the dataset. Since the column enrollee_id is removed, now we can check that. We cannot do it previously because the column enrollee_id has the same number of unique values as the number of rows in the dataset. For that purpose, we can use the function duplicated() which returns all rows that appear at least twice in the dataset. It seems that there are 98 duplicated observations in our current dataset.
 
 ```{r}
 # Find number of duplicated rows
-sum(duplicated(aug)) # 120
+sum(duplicated(aug)) # 98
 # Find which observations are duplicated
-duples <- which(duplicated(aug)) # One of the duplicated rows in the one in the position 247
+duples <- which(duplicated(aug)) # One of the duplicated rows in the one in the position 240
 
 # The function shows ids of rows that have already appeared before
 
-# Show the duplicated observations of the observation 247
+# Show the duplicated observations of the observation 240
 find_previous_duplicate <- function(df, row_id) {
   target <- df[row_id,]
   # Compare each row above row_id
@@ -688,13 +701,13 @@ find_previous_duplicate <- function(df, row_id) {
   }
   return(NA) # No previous match
 }
-previous_row_index <- find_previous_duplicate(aug, duples[1]) # Obs 247
+previous_row_index <- find_previous_duplicate(aug, duples[1]) # Obs 240
 aug[c(duples[1], previous_row_index),]
 
 # Remove duplicated rows
 aug <- aug[-duples,]
 
-# Reseting row names
+# Resetting row names
 row.names(aug) <- NULL
 ```
 
@@ -737,15 +750,39 @@ aug$f.company_size <- factor(aug$f.company_size)
 aug$f.company_size
 ```
 
+The variable city has 122 levels, which reduces the interpretability of subsequent models. We have two options: either remove it entirely or group it into a smaller number of categories. The most frequent cities are 103, 21, 16, 114, and 160, in that order. Since the remaining cities appear much less frequently, we can group them together with city 160. This way, we reduce the variable to just five meaningful categories, improving interpretability while retaining the most important information.
+
+```{r}
+# Number of city levels
+lencity <- length(levels(aug$city))
+
+# Which are the most frequent levels
+sort(table(aug$city))[(lencity-4):lencity]
+
+# Reducing the number of categories of city
+aug$f.city <- 0
+aug$f.city[which(aug$city == "city_103")] <- 4
+aug$f.city[which(aug$city == "city_21")] <- 3
+aug$f.city[which(aug$city == "city_16")] <- 2
+aug$f.city[which(aug$city == "city_114")] <- 1
+
+# From numeric to factors
+aug$f.city <- factor(aug$f.city,labels=c("city_0","city_1","city_2","city_3","city_4"))
+
+# Print the Barplot of the f.city
+barplot(table(aug$f.city))
+```
+
 ## 2. Profiling and Feature Selection
 
-Our target variable is (binary) categorical, so we will use catdes() from FactoMineR library to do the profiling. The most correlated categorical variables with the target variable target are city, f.city_development_index, company_size, experience, f.experience, enrolled_university, f.company_size and relevent_experience (p.value < 1e-50). On the other hand, the most correlated numerical variables (the only ones we have) are city_development_index (Eta2 = 0.11) and training_hours (Eta2 ~ 0).
+Our target variable is (binary) categorical, so we will use catdes() from FactoMineR library to do the profiling. The most correlated categorical variables with the target variable target are f.city_development_index, f.city, f.experience, f.company_size, enrolled_university, relevent_experience and education_level (p.value < 1e-30). On the other hand, the most correlated numerical variables (the only ones we have) are city_development_index (Eta2 = 0.11) and training_hours (Eta2 = 0.00044).
 
-According to the results in \$quanti, employees who have the intent of changing the job have the significant mean lower than the grand mean in the variables training_hours and city_development_index. Next, let's focus on the results given by \$category. The employees who have the intent of changing the job have low city_development_index and their current company's size is small. Their total experience in years is between less than a year and 5 years, so they do not have relevant experience, they were enrolled in a full time course at a university and their education level is a bachelor's. Based on this information, we can conclude that individuals seeking to change jobs are likely recent graduates with limited experience in the field.
+According to the results in \$quanti, employees who have the intent of changing the job have the significant mean lower than the grand mean in the variables training_hours and city_development_index. Next, let's focus on the results given by \$category. The employees who have the intent of changing the job are from the city 3 (33% of the group) and have low city_development_index (49% of the group) and their current company's size is small (74% of the group). Their total experience in years is between less than a year and 5 years (46% of the group), so they do not have relevant experience (38% of the group), they were enrolled in a full time course at a university (30% of the group), their education level is bachelor's (70% of the group) and their current company type is Pvt Ltd (87% of the group). Based on this information, we can conclude that individuals seeking to change jobs are likely recent graduates with limited experience in the field.
 
 ```{r}
 # Applying catdes on target
-res.cat <- catdes(aug, num.var=13)
+res.cat <- catdes(aug[,c(2:7,10:ncol(aug))], num.var=10)
+# We exclude city, experience and company_size
 
 # Most significant categorical variables
 res.cat$test.chi2
@@ -762,12 +799,175 @@ res.cat$category
 
 In the posterior modelling, we will focus on the most significant variables identified during the profiling of the binary target. Both numerical variables and the discretized version of city_development_index are highly significant. However, since we only have two numerical variables in total, it makes more sense to keep city_development_index as a continuous variable and use it together with training_hours.
 
-The variable city is also highly significant, with a p-value essentially equal to 0. Even so, it includes far too many levels (119), which would make the interpretation of the models unnecessarily complicated, so we probably will not include it in the posterior analysis.
-
-On the other hand, all remaining categorical variables also appear to be strongly significant. In particular, f.experience stands out (and we prefer using f.experience instead of experience, since both have similar p-values but experience contains too many levels). The same argument applies to f.company_size. Other categorical variables that we consider for modelling include enrolled_university, relevent_experience, education_level, last_new_job and company_type, as they all show very low p-values and clear relevance for the target.
+On the other hand, all remaining categorical variables also appear to be strongly significant. The variables city, experience and company_size contain too many levels which will unnecessary increase the interpretability of the models, so we will use f.city, f.experience and f.company_size instead. 
 
 ## 3. Modeling Using Numeric Variables
 
+Binary outcome modelling is widely used in real situations, such as deciding whether to grant a loan or predicting if a player will get injured in the next match. To handle this type of problem, we rely on logistic regression, where the key component is the link function, which transforms the linear predictor from the range $(-\infty, \infty)$ into a probability between 0 and 1. In our case, we will start by using the two relevant numerical variables in the dataset to build a binary model using glm().
+
+We have two possible link functions: **Logit** and **Probit**
+
+#### **(1) Logit Link Function**
+
+The logit link transforms a linear predictor from the real line $(-\infty, \infty)$  
+into a probability in the interval $[0, 1]$:
+
+\[
+\text{logit}(\pi) = \ln\left(\frac{\pi}{1 - \pi}\right)
+\]
+
+The inverse link (**logistic function**) gives the predicted probability:
+
+\[
+g^{-1}(X) = \pi = \frac{\exp(X)}{1 + \exp(X)}
+\]
+
+Using a threshold \(s\), we convert probabilities into class predictions:
+
+\[
+\pi > s \Rightarrow \hat{y} = 1
+\]
+
+\[
+\pi \le s \Rightarrow \hat{y} = 0
+\]
+
+---
+
+#### **(2) Probit Link Function**
+
+The probit link is based on the cumulative distribution function (CDF) of the standard normal distribution. It maps a linear predictor to a probability using:
+
+\[
+\pi = \Phi(X)
+\]
+
+In R:
+
+- `pnorm()` computes the standard normal CDF, returning the probability that a normal variable is less than or equal to a given value:
+
+```{r}
+pnorm(-2.12, lower.tail = TRUE)
+```
+
+- `qnorm()` performs the inverse operation, returning the quantile corresponding to a given probability:
+
+```{r}
+qnorm(0.01700302)
+```
+Before using the numerical predictors, we will analyze the NULL model derived from the target variable target. The target variable has two levels, NO-Job-Change and YES-Job-Change, with proportions 0.75 and 0.25 respectively in the dataset. By computing the log of the odds of the target class (YES-Job-Change), we obtain the intercept of the NULL model. The odds of success is 0.33, which means we have around 0.33% of chance to find a success than a failure, the negative value of intercept (-1.10726) means it is more likely to find failure classes (NO-Job-Change).
+
+```{r}
+# NULL mode, by default we are using the logit link function
+m0 <- glm(target ~ 1, family=binomial, data = aug)
+
+# Proportions of NoJobChange vs YesJobChange
+ptt<-prop.table(table(aug$target))
+ptt # Estimation of the probability of having a job change
+
+# Odds of the positive class: How probable is it to find a success than a failure
+odds <- ptt[2]/(1-ptt[2])
+odds
+
+# log(Odds)
+log(odds) # This gives us the intercept of the NULL model
+# Positive: more likely to find successful events
+# Negative: more likely to find unsuccessful events
+
+# The intercept or log(Odds) can also be computed using qlogis (when we use logit)
+qlogis(ptt)[2] # Intercept of the positive class
+
+# From the intercept we can get the probability applying the inverse link function
+lp <- log(odds) # qlogis(ptt)[2]
+exp(lp) / (1 + exp(lp)) # The estimation of the probability of having a job change
+# This can also be done using the following function
+plogis(log(odds))
+
+# The intercept estimate is the log of odds of the NULL model
+summary(m0)
+```
+
+In case of using probit link function, the intercept we get is different. In order to get this value here, we need to apply qnorm() on the estimated probability of the positive class and then apply pnorm on the intercept to get the same probability we get in the previous cell. This shows that even though the intercept and predictor values change from one link function to another, the resulting predicted probabilities remain the same. For the rest of the exercises, we will focus on only one link function; in our case, we will use the logit function.
+
+```{r}
+# NULL mode (probit)
+m0p <- glm(target ~ 1, family=binomial(link="probit"), data = aug)
+summary(m0p)
+
+# The intercept or log(Odds)
+qnorm(ptt)[2]
+# Get the probability from the intercept
+pnorm(coef(m0p)[1]) # pnorm(qnorm(ptt)[2])
+```
+
+Next, we add the numerical predictors to the model. When we check the summary of model m1, we see that the estimate for training_hours is very small. This by itself is not an issue; what matters is that the p-value for this predictor is very high (above 0.01 or 0.05), indicating that it is not statistically significant. Because of this lack of significance, we will discard training_hours from the model.
+
+The estimate of the predictor city_development_index is -5.9825, which is the new effect added to the model. This means that when the city development index increases by one unit, the log(odds) of YES-Job-Change decrease by about 5.98. In other words, higher city development index values are associated with a lower probability of job change according to the model. To support this idea, we computed the predicted probabilities of job change for a high value of city_development_index (0.949) and for a low value (0.512). The results show that when the index is high, the probability of job change is approximately 0.1269, whereas when the index is low, the probability increases to about 0.6649.
+
+```{r}
+# Adding numeric predictors to the model
+m1 <- glm(target ~ city_development_index + training_hours, family=binomial(link="logit"), data=aug)
+summary(m1)
+
+# New model after discarding training_hours
+m1d <- glm(target ~ city_development_index, family=binomial(link="logit"), data=aug)
+summary(m1d)
+
+# Total estimation (log-odds) of job change when city_development_index is high
+lp_max <- coef(m1d)[1] + 0.949 * coef(m1d)[2] # 0.949 = maximum value in the dataset
+lp_max
+# Get the probability from the linear predictor lp
+exp(lp_max) / (1 + exp(lp_max)) # Probability of job change when the index is high
+
+# Total estimation (log-odds) of job change when city_development_index is low
+lp_min <- coef(m1d)[1] + 0.512 * coef(m1d)[2] # 0.512 = minimum value in the dataset
+lp_min
+# Get the probability from the linear predictor lp
+exp(lp_min) / (1 + exp(lp_min)) # Probability of job change when the index is low
+```
+
+
+## 3.1. Residual Analysis: Unusual and Influent Data Filtering
+
+```{r}
+# 
+m1 <- glm(target ~ city_development_index, family="binomial", data = aug)
+
+ptt1<-prop.table(table(aug$target,aug$city_development_index),1); ptt1
+summary(m1)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-| severe and mild outliers should not be set to NA (remove the severe ones only)
+-| multivariate outliers should be removed (after analyzing the multivariate outliers)
+-| check consistency after imputation / validation of the imputation
+-| we need to show condes() catdes() outspust (all outputs)
+-| we do not use factors with too many levels
+-> eliminate severe multicollinearity (GVIFˆ (1/(2∗Df))>10) to the full
+-> eliminate residual outliers to the full
+-> non-normally distributed residuals in qq-plot
+-> show cook's distance for influent data checking
+-> R2 goodness of fit should be discussed in the final model
+-> Residual analysis shows divergences to linear model hypothesis (fix this situation)
+-> Influent data cleaning process should be shown
 
 
 ---> We do the splits after analyzing the whole/original dataset (although in the real world scenarios we can only use the train set to analyze the distribution of the data)
@@ -786,6 +986,5 @@ dim(aug_train) # 16285 obs + 14 variables
 dim(aug_test) # 2873 obs + 14 variables
 ```
 
-## 3.1. Residual Analysis: Unusual and Influent Data Filtering
 
 
