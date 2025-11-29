@@ -13,7 +13,6 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE) # Clear the plots
 rm(list=ls()) # Clear the environment
-set.seed(07150523) # Set a seed to reproduce outcomes
 ```
 
 We start by loading essential libraries and importing the data.
@@ -855,14 +854,27 @@ pnorm(-2.12, lower.tail = TRUE)
 ```{r}
 qnorm(0.01700302)
 ```
-Before using the numerical predictors, we will analyze the NULL model derived from the target variable target. The target variable has two levels, NO-Job-Change and YES-Job-Change, with proportions 0.75 and 0.25 respectively in the dataset. By computing the log of the odds of the target class (YES-Job-Change), we obtain the intercept of the NULL model. The odds of success is 0.33, which means we have around 0.33% of chance to find a success than a failure, the negative value of intercept (-1.10726) means it is more likely to find failure classes (NO-Job-Change).
+
+In the next step, we will split the data into training and test sets. The test set will remain unseen during model building, so all model fitting and initial analysis will be performed primarily on the training set, while the test set will be reserved for evaluating model performance.
 
 ```{r}
-# NULL mode, by default we are using the logit link function
-m0 <- glm(target ~ 1, family=binomial, data = aug)
+# Set a seed to reproduce outcomes
+set.seed(07150523)
+
+# Split dataset
+sets <- sample(1:nrow(aug),size = round(0.8*nrow(aug), dig=0), replace = FALSE)
+aug_train <- aug[sets,]
+aug_test <- aug[-sets,]
+```
+
+Before using the numerical predictors, we will analyze the NULL model derived from the target variable target. The target variable has two levels, NO-Job-Change and YES-Job-Change, with proportions 0.7528 and 0.247 respectively in the dataset. By computing the log of the odds of the target class (YES-Job-Change), we obtain the intercept of the NULL model. The odds of success is 0.33, which means we have around 0.33% of chance to find a success than a failure, the negative value of intercept (-1.113508) means it is more likely to find failure classes (NO-Job-Change).
+
+```{r}
+# NULL model, by default we are using the logit link function
+m0 <- glm(target ~ 1, family=binomial, data = aug_train)
 
 # Proportions of NoJobChange vs YesJobChange
-ptt<-prop.table(table(aug$target))
+ptt<-prop.table(table(aug_train$target))
 ptt # Estimation of the probability of having a job change
 
 # Odds of the positive class: How probable is it to find a success than a failure
@@ -891,7 +903,7 @@ In case of using probit link function, the intercept we get is different. In ord
 
 ```{r}
 # NULL mode (probit)
-m0p <- glm(target ~ 1, family=binomial(link="probit"), data = aug)
+m0p <- glm(target ~ 1, family=binomial(link="probit"), data = aug_train)
 summary(m0p)
 
 # The intercept or log(Odds)
@@ -902,48 +914,228 @@ pnorm(coef(m0p)[1]) # pnorm(qnorm(ptt)[2])
 
 Next, we add the numerical predictors to the model. When we check the summary of model m1, we see that the estimate for training_hours is very small. This by itself is not an issue; what matters is that the p-value for this predictor is very high (above 0.01 or 0.05), indicating that it is not statistically significant. Because of this lack of significance, we will discard training_hours from the model.
 
-The estimate of the predictor city_development_index is -5.9825, which is the new effect added to the model. This means that when the city development index increases by one unit, the log(odds) of YES-Job-Change decrease by about 5.98. In other words, higher city development index values are associated with a lower probability of job change according to the model. To support this idea, we computed the predicted probabilities of job change for a high value of city_development_index (0.949) and for a low value (0.512). The results show that when the index is high, the probability of job change is approximately 0.1269, whereas when the index is low, the probability increases to about 0.6649.
+The estimate of the predictor city_development_index is -6.1209733, which is the new effect added to the model. This means that when the city development index increases by one unit, the log(odds) of YES-Job-Change decrease by about 6.121. In other words, higher city development index values are associated with a lower probability of job change according to the model. To support this idea, we computed the predicted probabilities of job change for a high value of city_development_index (0.949) and for a low value (0.512). The results show that when the index is high, the probability of job change is approximately 0.1236, whereas when the index is low, the probability increases to about 0.672.
 
 ```{r}
 # Adding numeric predictors to the model
-m1 <- glm(target ~ city_development_index + training_hours, family=binomial(link="logit"), data=aug)
+m1 <- glm(target ~ city_development_index + training_hours, family=binomial(link="logit"), data=aug_train)
 summary(m1)
 
 # New model after discarding training_hours
-m1d <- glm(target ~ city_development_index, family=binomial(link="logit"), data=aug)
+m1d <- glm(target ~ city_development_index, family=binomial(link="logit"), data=aug_train)
 summary(m1d)
+
+# ------------------------------------------------------------------------------
 
 # Total estimation (log-odds) of job change when city_development_index is high
 lp_max <- coef(m1d)[1] + 0.949 * coef(m1d)[2] # 0.949 = maximum value in the dataset
 lp_max
-# Get the probability from the linear predictor lp
+# Get the probability from the linear predictor lp_max
 exp(lp_max) / (1 + exp(lp_max)) # Probability of job change when the index is high
 
 # Total estimation (log-odds) of job change when city_development_index is low
 lp_min <- coef(m1d)[1] + 0.512 * coef(m1d)[2] # 0.512 = minimum value in the dataset
 lp_min
-# Get the probability from the linear predictor lp
+# Get the probability from the linear predictor lp_min
 exp(lp_min) / (1 + exp(lp_min)) # Probability of job change when the index is low
 ```
 
-
-## 3.1. Residual Analysis: Unusual and Influent Data Filtering
+Next, we check if we should apply any transformation to city_development_index. For this purpose, we will use boxcox. The lambda we obtain is 2, which suggests that we should apply a square effect to the variable. After applying the square effect, we can see through the summary function that all coefficients in the model m1s are statistically significant according to the low p-value.
 
 ```{r}
-# 
-m1 <- glm(target ~ city_development_index, family="binomial", data = aug)
+# Applying boxcox
+b <- boxcox(city_development_index ~ 1, data = aug_train)
+lambda <- b$x[which.max(b$y)]; lambda
 
-ptt1<-prop.table(table(aug$target,aug$city_development_index),1); ptt1
-summary(m1)
+# Applying square effect
+m1s <- glm(target ~ poly(city_development_index, 2), family=binomial(link="logit"), data=aug_train)
+summary(m1s)
+```
+
+When comparing the residual plots of the quadratic model to the linear model, the quadratic model shows a better fit on the right side, where the residuals more closely follow the curvature of the underlying relationship. However, on the left side, the quadratic plot exhibits a larger gap than the linear model, suggesting that the added squared term may introduce some distortion in that region.
+
+On the other hand, the marginal model plots show that the model with the quadratic term captures the curvature of the data more effectively. Its fitted line adapts well to the underlying nonlinear pattern, whereas the linear model does not reproduce this shape. Nonetheless, the linear fit still follows the general direction and overall trend of the data, even if it misses the curvature.
+
+```{r}
+# The models we get from the previous cell
+m1 <- glm(target ~ poly(city_development_index, 2), family=binomial, data = aug_train)
+# NULL model
+m0 <- glm(target ~ 1, family=binomial, data = aug_train)
+# The model without square effect on city_development_index
+m1d <- glm(target ~ city_development_index, family=binomial, data=aug_train)
+```
+
+```{r}
+# Which variables are important for modelling
+Anova(m1, test="LR")
+Anova(m1d, test="LR")
+# Both linear and quadratic effects of city_development_index are significant
+```
+
+```{r}
+# ResidualPlots for m1 and m1d
+residualPlots(m1)
+residualPlots(m1d)
+```
+
+```{r}
+# MarginalModelPlots for each model
+marginalModelPlots(m1)
+marginalModelPlots(m1d)
+```
+
+Based on the Analysis of Deviance using anova(), the model with the quadratic term provides a significantly better fit than the simple linear model. The likelihood ratio test shows a large difference in deviance (66.72) with an extremely small p-value (< 2.2e-16), indicating that the quadratic term explains variation in the response that the linear term alone cannot capture. Therefore, the quadratic model is preferred, as it better accounts for the nonlinear relationship between city_development_index and the probability of the target outcome.
+
+```{r}
+# Apply a Deviance test
+anova(m1d, m1, test="Chisq")
+```
+
+Next, we explored adding a cubic term for city_development_index to see if it further improves the model. All coefficients remained statistically significant. We also tried higher-order polynomial transformations, such as a 4th-degree polynomial, and again all coefficients were significant. Although we could continue increasing the polynomial degree, we chose to stop to avoid overfitting the model. Additionally, the step() function confirmed that none of the coefficients were insignificant, supporting the inclusion of the selected polynomial terms.
+
+The residual plots of the cubic and 4th-degree polynomial models are quite similar, but if we had to choose, the cubic model appears preferable. The marginal model plots of the cubic model show that it closely follows the pattern of the data, whereas the 4th-degree polynomial model aligns almost perfectly. While this may seem desirable, it raises the risk of overfitting. The difference in deviance between the two models is 19.531, indicating that the higher-order model provides only a modest improvement in fit compared to the cubic model. This conclusion is further supported by the AIC values, where the more complex model only reduces AIC by 17 units. Therefore, we decide to retain the cubic model, as it balances a good fit with lower complexity and a reduced risk of overfitting.
+
+```{r}
+# Adding cubic effect
+m1c3 <- glm(target ~ poly(city_development_index, 3), family=binomial, data = aug_train)
+summary(m1c3)
+step(m1c3)
+
+# Use 4th degree polynomial
+m1c4 <- glm(target ~ poly(city_development_index, 4), family=binomial, data = aug_train)
+summary(m1c4)
+step(m1c4)
+```
+
+```{r}
+# ResidualPlots for m1c3 and m1c4
+residualPlots(m1c3)
+residualPlots(m1c4)
+```
+
+```{r}
+# MarginalModelPlots for each model
+marginalModelPlots(m1c3)
+marginalModelPlots(m1c4)
+```
+
+```{r}
+# Apply a Deviance test
+anova(m1c3, m1c4, test="Chisq")
+```
+
+```{r}
+AIC(m1c3,m1c4) # The m1c4 model only provides a small decrease in AIC
+AIC(m1c3,m1) # The m1c3 model decreases AIC by 54, compared with the square effect model
+```
+
+### 3.1. Residual Analysis: Unusual and Influent Data Filtering
+
+In this section, we remove unusual and influential observations from the training set to refine the model. We begin by examining the marginal model plots and residual plots of the cubic model, which already shows a good overall fit and follows the nonlinear pattern in the data reasonably well. Nonetheless, some observations exert disproportionately large influence, so we apply influencePlot, hat-values, and Cook’s distance to identify such cases. After removing the most extreme influential observations, the marginal model plots show that the refitted cubic model aligns slightly better with the data. This improvement is also reflected in a decrease of about 45 AIC units. When comparing Cook’s distances before and after cleaning, the original model contained points exceeding 0.002, whereas the cleaned model removes most of them. Since the remaining Cook’s distances, although some reach values around 0.002, are still very small relative to the sample size (~15,000 observations), these levels of influence are not problematic for a logistic regression model. Additionally, the coefficients of the cubic terms change by only about one unit, suggesting that the model has stabilized. For these reasons, we do not remove any further observations.
+
+```{r}
+# Fit cubic polynomial model
+m1c3 <- glm(target ~ poly(city_development_index, 3), family=binomial, data = aug_train)
+
+# ----------------------------
+# Marginal model plots
+#    - Shows the partial relationship between predictor and response
+#    - id: label the top 5 most influential points according to Cook's distance
+# ----------------------------
+marginalModelPlots(m1c3,id=list(labels=row.names(aug_train),method=abs(cooks.distance(m1c3)), n=5))
+
+# ----------------------------
+# Residual diagnostics
+#    - residualPlots: component + partial residual plots
+#    - layout: arrange plots in 3 rows x 2 cols
+# ----------------------------
+residualPlots(m1c3, layout = c(3, 2))
+```
+
+```{r}
+# ----------------------------
+# Influence diagnostics (influencePlot)
+#    - Identifies observations with large leverage and influence
+#    - Returns row names of augmented training data
+# ----------------------------
+llnrem <- influencePlot(m1c3, id = list(n = 5)) # plots and returns the identified points
+llnrem # shows which rows were flagged
+attributes(llnrem) # row names
+high_lever_influ_idx <- which(rownames(aug_train) %in% rownames(llnrem)) # row numbers
+high_lever_influ_idx
+
+# ----------------------------
+# Apriori influential data analysis using hat-values and Cook's distance
+#    - Boxplot of hat-values: identifies high-leverage points
+#    - Add a reference line at 4*p/n
+# ----------------------------
+# hat-values boxplot: returns indices of labelled points (row numbers in aug_train)
+high_leverage_idx <- Boxplot(hatvalues(m1c3), id.n = 10)
+abline(h = 4 * length(coef(m1c3)) / nrow(aug_train), col = "red") # heuristic cutoff
+hatvalues(m1c3)[high_leverage_idx]
+
+# ----------------------------
+# Cook's distance: detect influential observations
+#    - Boxplot helps visualize and label the top Cook's distances
+# ----------------------------
+high_cooks_idx <- Boxplot(cooks.distance(m1c3), id.n = 10)
+# Show which observations (rows) are influential
+cooks.distance(m1c3)[high_cooks_idx]
+aug_train[high_cooks_idx, ]
+```
+
+```{r}
+# ----------------------------
+# Create a cleaned training set removing the influent data
+# ----------------------------
+aug_train_clean <- aug_train[-unique(c(high_lever_influ_idx, high_leverage_idx, high_cooks_idx)), ]
+
+# Fit the cubic polynomial model using the cleaned data
+m1c32 <- glm(target ~ poly(city_development_index, 3), family=binomial, data = aug_train_clean)
+```
+
+```{r}
+# ResidualPlots for m1c3 and m1c32
+residualPlots(m1c3)
+residualPlots(m1c32)
+```
+
+```{r}
+# MarginalModelPlots for each model
+marginalModelPlots(m1c3)
+marginalModelPlots(m1c32)
+```
+
+```{r}
+AIC(m1c3,m1c32) # The m1c32 model decreases AIC by 45 units
+```
+
+```{r}
+# Check Cook’s distance before removal
+plot(cooks.distance(m1c3))
+abline(h = 4/nrow(aug_train), col="red")
 ```
 
 
+```{r}
+# Check Cook’s distance after removal
+plot(cooks.distance(m1c32))
+abline(h = 4/nrow(aug_train_clean), col="red")
+```
 
+```{r}
+summary(m1c3)
+```
 
+```{r}
+summary(m1c32)
+```
 
+## 4. Adding factor main effects to the best model
 
-
-
+```{r}
+m2 <- glm(target ~ poly(city_development_index, 3), family=binomial, data = aug_train_clean)
+```
 
 
 
@@ -974,17 +1166,6 @@ summary(m1)
 
 Then, we split it into train and test sets. The test set will have 15% of the original dataset (2873), while the train set will have the remaining 85% (16285).
 
-```{r}
-# Split dataset
-ts <- sample(1:nrow(aug), size = 0.15 * nrow(aug), replace = FALSE)
-aug_test <- aug[ts,]
-aug_train <- aug[-ts,]
-
-# Get the dimension of the dataset
-dim(aug) # 19158 obs + 14 variables
-dim(aug_train) # 16285 obs + 14 variables
-dim(aug_test) # 2873 obs + 14 variables
-```
 
 
 
