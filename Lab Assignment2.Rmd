@@ -627,19 +627,55 @@ aug$company_size[which(aug$company_size == "")] <- NA
 aug$company_type[which(aug$company_type == "")] <- NA
 aug$last_new_job[which(aug$last_new_job == "")] <- NA
 
+aug$gender <- factor(aug$gender)
+aug$enrolled_university <- factor(aug$enrolled_university)
+aug$education_level <- factor(aug$education_level)
+aug$major_discipline <- factor(aug$major_discipline)
+aug$experience <- factor(aug$experience)
+aug$company_size <- factor(aug$company_size)
+aug$company_type <- factor(aug$company_type)
+aug$last_new_job <- factor(aug$last_new_job)
+```
+
+Note that the variables gender (4433), company_size (5852), and company_type (6051) have a lot of missing values in these columns. Although the variable major_discipline (2773) also has quite a lot, compared to the others its number is relatively low. An amount of around 5000 rows is too much for imputation, since it composes one quarter of the whole dataset, and the imputation results might not be accurate because they are assigned to the majority class, so we are going to assign an “Unknown” level to these three variables.
+
+```{r}
 # Imputation with imputePCA (~ 25 seconds)
 res.mca <- imputeMCA(aug[, c(2,4:12, 14)])
 
-# Validation
-summary(res.mca$completeObs)
-print("====================================")
+# Missing data vs Imputed data
 summary(aug[,c(2,4:12, 14)])
-
-# Retain the imputed values
-aug[,c(2,4:12, 14)] <- res.mca$completeObs
+print("====================================")
+summary(res.mca$completeObs)
 ```
 
-Having compared the imputed and unimputed categorical variables, we notice that in variables with a large number of NAs (thousands of empty strings), the imputation process tends to assign most of these NAs to the majority class. Only a small share ends up being imputed into the non-majority classes. This could be an error, or it might simply reflect the fact that the unnamed category genuinely belongs to the majority class. Either way, we will keep all the imputed values, as we need them to proceed with the rest of the assignment.
+```{r}
+# Function to replace NAs with "Unknown"
+add_unknown <- function(x) {
+  x <- factor(x)
+  levels(x) <- c(levels(x), "Unknown") # add new level
+  x[is.na(x)] <- "Unknown" # replace NA
+  return(x)
+}
+
+# Assigning "Unknown" levels
+aug$gender <- add_unknown(aug$gender)
+aug$company_size <- add_unknown(aug$company_size)
+aug$company_type <- add_unknown(aug$company_type)
+
+# Imputation with imputePCA
+new.res.mca <- imputeMCA(aug[, c(2,5:9,12,14)]) # We exclude these three variables
+
+# Missing data vs Imputed data
+summary(aug[, c(2,5:9,12,14)])
+print("====================================")
+summary(new.res.mca$completeObs)
+
+# Retain the imputed values
+aug[, c(2,5:9,12,14)] <- new.res.mca$completeObs
+```
+
+Having compared the imputed and unimputed categorical variables, we notice that in variables with a large number of NAs (thousands of empty strings), the imputation process tends to assign most of these NAs to the majority class (we are mainly talking about major_discipline). This could be an error, or it might simply reflect the fact that the unnamed category genuinely belongs to the majority class. Either way, we will keep the imputed values and now, we will proceed with the rest of the assignment.
 
 ### 1.3.3. Removing Multivariate Outliers
 
@@ -677,13 +713,13 @@ aug <- aug[,setdiff(names(aug),"enrollee_id")]
 names(aug)
 ```
 
-Then, we should check if there are any duplicated observations in the dataset. Since the column enrollee_id is removed, now we can check that. We cannot do it previously because the column enrollee_id has the same number of unique values as the number of rows in the dataset. For that purpose, we can use the function duplicated() which returns all rows that appear at least twice in the dataset. It seems that there are 98 duplicated observations in our current dataset.
+Then, we should check if there are any duplicated observations in the dataset. Since the column enrollee_id is removed, now we can check that. We cannot do it previously because the column enrollee_id has the same number of unique values as the number of rows in the dataset. For that purpose, we can use the function duplicated() which returns all rows that appear at least twice in the dataset. It seems that there are 52 duplicated observations in our current dataset.
 
 ```{r}
 # Find number of duplicated rows
-sum(duplicated(aug)) # 98
+sum(duplicated(aug)) # 52 (If we did not assign "Unknown" levels, it would be 98)
 # Find which observations are duplicated
-duples <- which(duplicated(aug)) # One of the duplicated rows in the one in the position 240
+duples <- which(duplicated(aug)) # One of the duplicated rows is in the position 240
 
 # The function shows ids of rows that have already appeared before
 
@@ -710,7 +746,7 @@ aug <- aug[-duples,]
 row.names(aug) <- NULL
 ```
 
-The variables experience and company_size have too many levels, which will decrease the performance of the later modelling process. Therefore, we are going to group those levels into 4 groups at most.
+The variables experience and company_size have too many levels, which will decrease the performance of the later modelling process. Therefore, we are going to group those levels into 4 groups at most (1 extra position for "Unknown" levels).
 
 ```{r}
 # Summary of experience
@@ -741,6 +777,8 @@ aug$f.company_size[aug$company_size %in% c("100-500", "500-999")] <- "Medium"
 aug$f.company_size[aug$company_size %in% c("1000-4999", "5000-9999")] <- "Large"
 # Very Large: 10000+
 aug$f.company_size[aug$company_size == "10000+"] <- "Very-Large"
+# Unknown
+aug$f.company_size[aug$company_size == "Unknown"] <- "Unknown"
 
 # To factor
 aug$f.company_size <- factor(aug$f.company_size)
@@ -774,9 +812,9 @@ barplot(table(aug$f.city))
 
 ## 2. Profiling and Feature Selection
 
-Our target variable is (binary) categorical, so we will use catdes() from FactoMineR library to do the profiling. The most correlated categorical variables with the target variable target are f.city_development_index, f.city, f.experience, f.company_size, enrolled_university, relevent_experience and education_level (p.value < 1e-30). On the other hand, the most correlated numerical variables (the only ones we have) are city_development_index (Eta2 = 0.11) and training_hours (Eta2 = 0.00044).
+Our target variable is (binary) categorical, so we will use catdes() from FactoMineR library to do the profiling. The most correlated categorical variables with the target variable target are f.city_development_index, f.city, f.company_size, f.experience, enrolled_university, relevent_experience and education_level (p.value < 1e-30). On the other hand, the most correlated numerical variables (the only ones we have) are city_development_index (Eta2 = 0.11) and training_hours (Eta2 = 0.00044).
 
-According to the results in \$quanti, employees who have the intent of changing the job have the significant mean lower than the grand mean in the variables training_hours and city_development_index. Next, let's focus on the results given by \$category. The employees who have the intent of changing the job are from the city 3 (33% of the group) and have low city_development_index (49% of the group) and their current company's size is small (74% of the group). Their total experience in years is between less than a year and 5 years (46% of the group), so they do not have relevant experience (38% of the group), they were enrolled in a full time course at a university (30% of the group), their education level is bachelor's (70% of the group) and their current company type is Pvt Ltd (87% of the group). Based on this information, we can conclude that individuals seeking to change jobs are likely recent graduates with limited experience in the field.
+According to the results in \$quanti, employees who have the intent of changing the job have the significant mean lower than the grand mean in the variables training_hours and city_development_index. Next, let's focus on the results given by \$category. The employees who have the intent of changing the job are from the city 3 (33% of the group) and have low city_development_index (49% of the group) and their current company's size and type are unknown (50% of the group for each variable). Their total experience in years is between less than a year and 5 years (46% of the group), so they do not have relevant experience (38% of the group), they were enrolled in a full time course at a university (30% of the group) and their education level is bachelor's (70% of the group). Based on this information, we can conclude that individuals seeking to change jobs are likely recent graduates with limited experience in the field.
 
 ```{r}
 # Applying catdes on target
@@ -867,7 +905,7 @@ aug_train <- aug[sets,]
 aug_test <- aug[-sets,]
 ```
 
-Before using the numerical predictors, we will analyze the NULL model derived from the target variable target. The target variable has two levels, NO-Job-Change and YES-Job-Change, with proportions 0.7528 and 0.247 respectively in the dataset. By computing the log of the odds of the target class (YES-Job-Change), we obtain the intercept of the NULL model. The odds of success is 0.33, which means we have around 0.33% of chance to find a success than a failure, the negative value of intercept (-1.113508) means it is more likely to find failure classes (NO-Job-Change).
+Before using the numerical predictors, we will analyze the NULL model derived from the target variable target. The target variable has two levels, NO-Job-Change and YES-Job-Change, with proportions 0.7517 and 0.248 respectively in the dataset. By computing the log of the odds of the target class (YES-Job-Change), we obtain the intercept of the NULL model. The odds of success is 0.33, which means we have around 0.33% of chance to find a success than a failure, the negative value of intercept (-1.107643) means it is more likely to find failure classes (NO-Job-Change).
 
 ```{r}
 # NULL model, by default we are using the logit link function
@@ -914,7 +952,7 @@ pnorm(coef(m0p)[1]) # pnorm(qnorm(ptt)[2])
 
 Next, we add the numerical predictors to the model. When we check the summary of model m1, we see that the estimate for training_hours is very small. This by itself is not an issue; what matters is that the p-value for this predictor is very high (above 0.01 or 0.05), indicating that it is not statistically significant. Because of this lack of significance, we will discard training_hours from the model.
 
-The estimate of the predictor city_development_index is -6.1209733, which is the new effect added to the model. This means that when the city development index increases by one unit, the log(odds) of YES-Job-Change decrease by about 6.121. In other words, higher city development index values are associated with a lower probability of job change according to the model. To support this idea, we computed the predicted probabilities of job change for a high value of city_development_index (0.949) and for a low value (0.512). The results show that when the index is high, the probability of job change is approximately 0.1236, whereas when the index is low, the probability increases to about 0.672.
+The estimate of the predictor city_development_index is -6.02, which is the new effect added to the model. This means that when the city development index increases by one unit, the log(odds) of YES-Job-Change decrease by about 6.02. In other words, higher city development index values are associated with a lower probability of job change according to the model. To support this idea, we computed the predicted probabilities of job change for a high value of city_development_index (0.949) and for a low value (0.512). The results show that when the index is high, the probability of job change is approximately 0.1262, whereas when the index is low, the probability increases to about 0.668.
 
 ```{r}
 # Adding numeric predictors to the model
@@ -952,7 +990,7 @@ m1s <- glm(target ~ poly(city_development_index, 2), family=binomial(link="logit
 summary(m1s)
 ```
 
-When comparing the residual plots of the quadratic model to the linear model, the quadratic model shows a better fit on the right side, where the residuals more closely follow the curvature of the underlying relationship. However, on the left side, the quadratic plot exhibits a larger gap than the linear model, suggesting that the added squared term may introduce some distortion in that region.
+When comparing the residual plots for the quadratic and linear models, the quadratic model shows a better fit in the left plot: the residuals follow the curvature of the underlying relationship more closely. However, in the right plot the linear predictor displays an odd pattern, the pink line first dips and then rises into the positive Pearson residuals, which suggests the added squared term may be introducing some distortion.
 
 On the other hand, the marginal model plots show that the model with the quadratic term captures the curvature of the data more effectively. Its fitted line adapts well to the underlying nonlinear pattern, whereas the linear model does not reproduce this shape. Nonetheless, the linear fit still follows the general direction and overall trend of the data, even if it misses the curvature.
 
@@ -984,7 +1022,7 @@ marginalModelPlots(m1)
 marginalModelPlots(m1d)
 ```
 
-Based on the Analysis of Deviance using anova(), the model with the quadratic term provides a significantly better fit than the simple linear model. The likelihood ratio test shows a large difference in deviance (66.72) with an extremely small p-value (< 2.2e-16), indicating that the quadratic term explains variation in the response that the linear term alone cannot capture. Therefore, the quadratic model is preferred, as it better accounts for the nonlinear relationship between city_development_index and the probability of the target outcome.
+Based on the Analysis of Deviance using anova(), the model with the quadratic term provides a significantly better fit than the simple linear model. The likelihood ratio test shows a large difference in deviance (71.72) with an extremely small p-value (< 2.2e-16), indicating that the quadratic term explains variation in the response that the linear term alone cannot capture. Therefore, the quadratic model is preferred, as it better accounts for the nonlinear relationship between city_development_index and the probability of the target outcome.
 
 ```{r}
 # Apply a Deviance test
@@ -993,7 +1031,7 @@ anova(m1d, m1, test="Chisq")
 
 Next, we explored adding a cubic term for city_development_index to see if it further improves the model. All coefficients remained statistically significant. We also tried higher-order polynomial transformations, such as a 4th-degree polynomial, and again all coefficients were significant. Although we could continue increasing the polynomial degree, we chose to stop to avoid overfitting the model. Additionally, the step() function confirmed that none of the coefficients were insignificant, supporting the inclusion of the selected polynomial terms.
 
-The residual plots of the cubic and 4th-degree polynomial models are quite similar, but if we had to choose, the cubic model appears preferable. The marginal model plots of the cubic model show that it closely follows the pattern of the data, whereas the 4th-degree polynomial model aligns almost perfectly. While this may seem desirable, it raises the risk of overfitting. The difference in deviance between the two models is 19.531, indicating that the higher-order model provides only a modest improvement in fit compared to the cubic model. This conclusion is further supported by the AIC values, where the more complex model only reduces AIC by 17 units. Therefore, we decide to retain the cubic model, as it balances a good fit with lower complexity and a reduced risk of overfitting.
+The residual plots of the cubic and 4th-degree polynomial models are quite similar, but if we had to choose, the cubic model appears preferable. The marginal model plots of the cubic model show that it closely follows the pattern of the data, whereas the 4th-degree polynomial model aligns almost perfectly. While this may seem desirable, it raises the risk of overfitting. The difference in deviance between the two models is 25.524, indicating that the higher-order model provides only a modest improvement in fit compared to the cubic model. This conclusion is further supported by the AIC values, where the more complex model only reduces AIC by 23.53 units (from 3th-degree to 4th-degree). Therefore, we decide to retain the cubic model, as it balances a good fit with lower complexity and a reduced risk of overfitting.
 
 ```{r}
 # Adding cubic effect
@@ -1025,13 +1063,14 @@ anova(m1c3, m1c4, test="Chisq")
 ```
 
 ```{r}
-AIC(m1c3,m1c4) # The m1c4 model only provides a small decrease in AIC
-AIC(m1c3,m1) # The m1c3 model decreases AIC by 54, compared with the square effect model
+AIC(m1c3,m1) # The m1c3 model decreases AIC by 50, compared with the square effect model
+AIC(m1c4,m1) # The m1c4 model decreases AIC by 73.5
+AIC(m1c3,m1c4) # The m1c4 model only provides a small decrease in AIC (23.53)
 ```
 
 ### 3.1. Residual Analysis: Unusual and Influent Data Filtering
 
-In this section, we remove unusual and influential observations from the training set to refine the model. We begin by examining the marginal model plots and residual plots of the cubic model, which already shows a good overall fit and follows the nonlinear pattern in the data reasonably well. Nonetheless, some observations exert disproportionately large influence, so we apply influencePlot, hat-values, and Cook’s distance to identify such cases. After removing the most extreme influential observations, the marginal model plots show that the refitted cubic model aligns slightly better with the data. This improvement is also reflected in a decrease of about 45 AIC units. When comparing Cook’s distances before and after cleaning, the original model contained points exceeding 0.002, whereas the cleaned model removes most of them. Since the remaining Cook’s distances, although some reach values around 0.002, are still very small relative to the sample size (~15,000 observations), these levels of influence are not problematic for a logistic regression model. Additionally, the coefficients of the cubic terms change by only about one unit, suggesting that the model has stabilized. For these reasons, we do not remove any further observations.
+In this section, we remove unusual and influential observations from the training set to refine the model. We begin by examining the marginal model plots and residual plots of the cubic model, which already shows a good overall fit and follows the nonlinear pattern in the data reasonably well. Nonetheless, some observations exert disproportionately large influence, so we apply influencePlot, hat-values, and Cook’s distance to identify such cases. After removing the most extreme influential observations, the marginal model plots show that the refitted cubic model aligns slightly better with the data. This improvement is also reflected in a decrease of about 45.43 AIC units. When comparing Cook’s distances before and after cleaning, the original model contained points exceeding 0.002, whereas the cleaned model removes most of them. Since the remaining Cook’s distances, although some reach values around 0.002, are still very small relative to the sample size (~15,000 observations), these levels of influence are not problematic for a logistic regression model. Additionally, the coefficients of the cubic terms change by only about one unit, suggesting that the model has stabilized. For these reasons, we do not remove any further observations.
 
 ```{r}
 # Fit cubic polynomial model
@@ -1107,7 +1146,7 @@ marginalModelPlots(m1c32)
 ```
 
 ```{r}
-AIC(m1c3,m1c32) # The m1c32 model decreases AIC by 45 units
+AIC(m1c3,m1c32) # The m1c32 model decreases AIC by 45 units, compared to m1c3
 ```
 
 ```{r}
@@ -1115,7 +1154,6 @@ AIC(m1c3,m1c32) # The m1c32 model decreases AIC by 45 units
 plot(cooks.distance(m1c3))
 abline(h = 4/nrow(aug_train), col="red")
 ```
-
 
 ```{r}
 # Check Cook’s distance after removal
