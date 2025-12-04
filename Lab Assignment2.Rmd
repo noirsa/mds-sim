@@ -43,6 +43,10 @@ library(readr)
 library(tidyr)
 library(tidyselect)
 library(effects)
+library(DescTools)
+library(ResourceSelection)
+library(ROCR)
+library(cvAUC)
 ```
 
 ```{r}
@@ -717,7 +721,9 @@ Then, we should check if there are any duplicated observations in the dataset. S
 
 ```{r}
 # Find number of duplicated rows
-sum(duplicated(aug)) # 52 (If we did not assign "Unknown" levels, it would be 98)
+sum(duplicated(aug))
+# 52 (If we did not assign "Unknown" levels and imputed the data as it is, it would be 98)
+
 # Find which observations are duplicated
 duples <- which(duplicated(aug)) # One of the duplicated rows is in the position 240
 
@@ -1026,7 +1032,7 @@ Based on the Analysis of Deviance using anova(), the model with the quadratic te
 
 ```{r}
 # Apply a Deviance test
-anova(m1d, m1, test="Chisq")
+anova(m1d, m1, test="Chisq") # The difference in deviance is significant
 ```
 
 Next, we explored adding a cubic term for city_development_index to see if it further improves the model. All coefficients remained statistically significant. We also tried higher-order polynomial transformations, such as a 4th-degree polynomial, and again all coefficients were significant. Although we could continue increasing the polynomial degree, we chose to stop to avoid overfitting the model. Additionally, the step() function confirmed that none of the coefficients were insignificant, supporting the inclusion of the selected polynomial terms.
@@ -1059,7 +1065,7 @@ marginalModelPlots(m1c4)
 
 ```{r}
 # Apply a Deviance test
-anova(m1c3, m1c4, test="Chisq")
+anova(m1c3, m1c4, test="Chisq") # The difference in deviance is significant
 ```
 
 ```{r}
@@ -1169,14 +1175,83 @@ summary(m1c3)
 summary(m1c32)
 ```
 
-## 4. Adding factor main effects to the best model
+### 3.2. Forecasting Capability of the Final Model in the Training Set
+
+Here we test our model to predict a worker's behaviour. We classify as likely job changers those individuals with a probability greater than or equal to 0.5. The contingency table or confusion matrix we got shows that out of 10891 negative classes, 9865 are classified correctly as NO-Job-Change and 1026 are wrongly classified as YES-Job-Change. On the other hand, out of 3590 positive classes, 2128 individuals are wrongly classified as negative and 1462 are correctly classified as YES-Job-Change. We got 0.7821974, 0.5876206, 0.4072423 and 0.4810793 for accuracy, precision, recall and f1-score, which indicates that although the model is reasonably good at identifying non-job changers, its ability to correctly detect actual job changers is limited, resulting in modest recall and a relatively low F1-score
+
+```{r}
+# Best model
+dfwork.fin <- m1c32
+
+# Model predictions on the training data aug_train_clean
+prob.change <- dfwork.fin$fit
+
+# If the probability is less than 0.5 we assign a 0, otherwise 1
+target.est <- ifelse(prob.change < 0.5,0,1)
+
+# Contingency table / Confusion matrix
+tt <- table(target.est, aug_train_clean$target); tt
+
+# Accuracy
+accuracy <- sum(diag(tt))/(dim(aug_train_clean)[1]); accuracy
+# Precision: How many of the correctly predicted cases actually turned out to be positive.
+precision <- tt[2,2]/(tt[2,2] + tt[2,1]); precision # TP / TP + FP
+# Recall: How many of the actual positive cases the model is able to predict correctly.
+recall <- tt[2,2]/(tt[2,2] + tt[1,2]); recall # TP / TP + FN
+# F1: Metric which takes into account both precision and recall.
+f1 <- 2*((precision*recall)/(precision+recall)); f1
+```
+
+The Pseudo coefficient of determination we got is 0.103387, which shows weak explanatory power of the current model on the training set. The p-value we obtained from the goodness-of-fit test based on the statistic proposed by Hosmer-Lemeshow is close to zero (p-value < 2.2e-16), so we reject the null hypothesis that the model fits the data, meaning that the model does not fit the training data. We also computed Pearson’s X2 goodness-of-fit statistic, and the result is 14514.77, a considerably large value that also indicates lack of fit.
+
+The left plot shows how the model’s classification error changes as the cutoff (probability value that the model uses to decide how to classify an instance) varies: at very low thresholds (around 0.1-0.2) the error rate is high, but it decreases as the cutoff approaches roughly 0.35-0.5, where the model performs best, and then begins to rise again for higher cutoffs. This indicates that the commonly used 0.5 threshold is reasonable here, as it is close to the optimal value suggested by the plot. The right plot shows the ROC curve, which lies above the diagonal, meaning the model performs better than random guessing, but its gradual upward shape, instead of curving steeply toward the top-left corner, reflects only moderate discriminative power. This aligns with the AUC of about 0.685, confirming that the model can distinguish between job changers and non–job changers, but not very strongly.
+
+```{r}
+# Pseudo coefficient of determination of the final model
+PseudoR2(dfwork.fin, which='all')[1] # pR2 McFadden
+#(1-dfwork.fin$dev/dfwork.fin$null.dev) # pR2 McFadden
+
+# McFadden’s pseudo-R^2 is a measure that compares the log-likelihood of our
+# fitted model against the log-likelihood of a model with no predictors.
+# Values between 0.2 and 0.4 are typically considered excellent for logistic regression
+# values below 0.1 indicate weak explanatory power.
+
+# Goodness of fit test using the statistic proposed by Hosmer-Lemershow
+hoslem.test(aug_train_clean$target, fitted(dfwork.fin), g=10)
+# H0: The logistic regression model fits the data
+# H1: The model does not fit the data
+
+# Pearson’s X^2 goodness-of-fit statistic
+sum(residuals(dfwork.fin, type='pearson')^2)
+# It measures how far the observed data deviate from the values predicted by the model.
+
+# Determine the predictive power by analyzing the ROC curve.
+dadesroc<-prediction(predict(dfwork.fin,type="response"), aug_train_clean$target)
+par(mfrow=c(1,2))
+plot(performance(dadesroc,"err"))
+plot(performance(dadesroc,"tpr","fpr"))
+abline(0,1,lty=2)
+# AUC (Area Under the ROC Curve)
+AUC(predict(dfwork.fin,type="response"),aug_train_clean$target)
+```
+
+## 4. Adding Factor Main Effects to the Best Model
 
 ```{r}
 m2 <- glm(target ~ poly(city_development_index, 3), family=binomial, data = aug_train_clean)
 ```
 
+### 4.1. Residual Analysis: Unusual and Influent Data Filtering
 
+### 4.2. 
 
+## 5. Adding factor main effects and interactions
+
+### 5.1. Residual Analysis: Unusual and Influent Data Filtering
+
+### 5.2 
+
+## 6. Goodness of Fit and Model Interpretation
 
 
 
